@@ -53,8 +53,21 @@ docker compose -f infra/docker-compose.yml up --build
 
 Compose 会启动：
 
-- `postgres`：业务数据持久化基础设施，并在新数据卷首次启动时创建 `conversations` 表。
-- `gateway`：等待 PostgreSQL 健康后启动，并暴露端口 `3000`。
+- `postgres`：业务数据持久化基础设施。
+- `migrate`：在 PostgreSQL 健康后执行版本化 SQL migration；已执行版本不会重复执行。
+- `gateway`：只在 migration 成功后启动，并暴露端口 `3000`。
+
+### 数据库升级
+
+不再依赖 PostgreSQL `initdb.d` 作为增量升级机制。版本化 SQL 位于 `infra/postgres/migrations/`，执行记录写入 `schema_migrations`；因此已有 Phase 1 数据卷会保留原数据，并依次补上 `002`、`003` 所需结构。
+
+本地手动执行：
+
+```bash
+npm run migrate
+```
+
+部署流程先执行 migration，确认成功后再启动 Gateway；Compose 已按这个顺序编排。
 
 ### Chatwoot 与 MaxKB 配置及数据流
 
@@ -86,7 +99,11 @@ Chatwoot customer message
 
 MaxKB 成功返回的 `choices[0].chat_id` 才会写入本地 `conversations.maxkb_chat_id`，并只在下一条同会话消息中传回；Gateway 不生成或猜测 MaxKB 会话 ID。`outgoing`、bot、system、非文本与非目标事件都会安全返回 2xx 而不调用下游服务，因此 Gateway 自己发出的回复不会形成 webhook 循环。
 
+同一 `message_id` 由数据库唯一键认领：重复或并发重复 webhook 返回安全 2xx，不会再次调用 MaxKB 或回帖。针对同一 Chatwoot conversation，Gateway 使用 PostgreSQL 事务级 advisory lock 串行化 MaxKB session 初始化，避免竞争创建多个会话。
+
 MaxKB 无可用答案或上游异常时，Gateway 不调用 LLM 兜底，而是回帖受控文案：`暂时无法从知识库中找到可靠答案，请稍后重试或联系人工客服。`
+
+日志只保留事件类型、会话/消息标识、处理状态与延迟；不记录完整 payload、问题、回答、Authorization、API Key 或数据库密码。数据库中保留 question/answer 仅用于 PoC 面试审计。生产环境还应增加数据保留期限、访问控制、脱敏与删除策略。
 
 ## 质量检查
 

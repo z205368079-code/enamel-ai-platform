@@ -148,7 +148,9 @@ export class HttpMaxKBClient implements MaxKBClient {
         throw new MaxKBClientError(
           'HTTP_ERROR',
           latencyMs,
-          response.status >= 500,
+          response.status === 408 ||
+            response.status === 429 ||
+            response.status >= 500,
           `MaxKB API returned HTTP ${response.status}.`,
         );
       }

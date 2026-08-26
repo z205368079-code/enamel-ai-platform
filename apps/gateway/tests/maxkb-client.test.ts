@@ -137,6 +137,41 @@ describe('HttpMaxKBClient', () => {
     expect(fetchFn).toHaveBeenCalledTimes(2);
   });
 
+  it.each([400, 401, 403, 404])(
+    'does not retry non-retryable HTTP %i responses',
+    async (status) => {
+      const fetchFn = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(jsonResponse({}, status));
+      const client = new HttpMaxKBClient(
+        { ...config, maxRetries: 1 },
+        fetchFn,
+        async () => undefined,
+      );
+
+      await expect(client.answer({ question: '测试' })).rejects.toMatchObject({
+        code: 'HTTP_ERROR',
+      });
+      expect(fetchFn).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('retries a timeout only once by default policy', async () => {
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockRejectedValue(new DOMException('aborted', 'AbortError'));
+    const client = new HttpMaxKBClient(
+      { ...config, maxRetries: 1 },
+      fetchFn,
+      async () => undefined,
+    );
+
+    await expect(client.answer({ question: '测试' })).rejects.toMatchObject({
+      code: 'TIMEOUT',
+    });
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
   it('classifies an application-level error response', async () => {
     const fetchFn = vi
       .fn<typeof fetch>()

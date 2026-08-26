@@ -4,6 +4,7 @@ import type { IncomingChatwootMessage } from '../domain/chatwoot.js';
 import { WebhookValidationError } from '../errors.js';
 import type { Logger } from '../logging/logger.js';
 import type { ConversationRepository } from '../repositories/conversation-repository.js';
+import type { WebhookMessageRepository } from '../repositories/webhook-message-repository.js';
 import type { KnowledgeAnswerService } from './knowledge-answer-service.js';
 
 export interface WebhookProcessingResult {
@@ -116,6 +117,7 @@ export function parseIncomingChatwootMessage(
 export class ChatwootWebhookService {
   constructor(
     private readonly conversationRepository: ConversationRepository,
+    private readonly webhookMessageRepository: WebhookMessageRepository,
     private readonly knowledgeAnswerService: KnowledgeAnswerService,
     private readonly chatwootClient: ChatwootClient,
     private readonly logger: Logger,
@@ -134,48 +136,67 @@ export class ChatwootWebhookService {
       return parsed;
     }
 
-    await this.conversationRepository.upsert({
-      chatwootConversationId: parsed.conversationId,
-      contactId: parsed.contactId,
-      mode: CONVERSATION_MODE.AI,
-    });
-
-    const maxkbChatId = await this.conversationRepository.getMaxKBChatId(
+    const claimed = await this.webhookMessageRepository.claim(
+      parsed.messageId,
       parsed.conversationId,
     );
-    const knowledgeAnswer = await this.knowledgeAnswerService.answerFor({
-      chatwootConversationId: parsed.conversationId,
-      messageId: parsed.messageId,
-      question: parsed.content,
-      maxkbChatId,
-    });
-
-    if (knowledgeAnswer.maxkbChatId !== undefined) {
-      await this.conversationRepository.setMaxKBChatId(
-        parsed.conversationId,
-        knowledgeAnswer.maxkbChatId,
+    if (!claimed) {
+      this.logger.info(
+        {
+          eventType: parsed.eventType,
+          conversationId: parsed.conversationId,
+          messageId: parsed.messageId,
+          processingResult: 'duplicate_message',
+        },
+        'Chatwoot webhook duplicate ignored.',
       );
+      return { status: 'ignored', reason: 'duplicate_message' };
     }
 
-    const result = await this.chatwootClient.sendConversationMessage({
-      conversationId: parsed.conversationId,
-      content: knowledgeAnswer.answer,
-    });
+    try {
+      await this.conversationRepository.upsert({
+        chatwootConversationId: parsed.conversationId,
+        contactId: parsed.contactId,
+        mode: CONVERSATION_MODE.AI,
+      });
 
-    this.logger.info(
-      {
-        eventType: parsed.eventType,
+      const knowledgeAnswer =
+        await this.conversationRepository.withMaxKBSession(
+          parsed.conversationId,
+          async (maxkbChatId) => {
+            const answer = await this.knowledgeAnswerService.answerFor({
+              chatwootConversationId: parsed.conversationId,
+              messageId: parsed.messageId,
+              question: parsed.content,
+              maxkbChatId,
+            });
+            return { value: answer, nextMaxKBChatId: answer.maxkbChatId };
+          },
+        );
+
+      const result = await this.chatwootClient.sendConversationMessage({
         conversationId: parsed.conversationId,
-        messageId: parsed.messageId,
-        processingResult: 'processed',
-        knowledgeStatus: knowledgeAnswer.status,
-        maxkbLatencyMs: knowledgeAnswer.latencyMs,
-        maxkbErrorCode: knowledgeAnswer.errorCode,
-        chatwootLatencyMs: result.latencyMs,
-      },
-      'Chatwoot webhook processed.',
-    );
+        content: knowledgeAnswer.answer,
+      });
 
-    return { status: 'processed' };
+      this.logger.info(
+        {
+          eventType: parsed.eventType,
+          conversationId: parsed.conversationId,
+          messageId: parsed.messageId,
+          processingResult: 'processed',
+          knowledgeStatus: knowledgeAnswer.status,
+          maxkbLatencyMs: knowledgeAnswer.latencyMs,
+          maxkbErrorCode: knowledgeAnswer.errorCode,
+          chatwootLatencyMs: result.latencyMs,
+        },
+        'Chatwoot webhook processed.',
+      );
+
+      return { status: 'processed' };
+    } catch (error: unknown) {
+      await this.webhookMessageRepository.release(parsed.messageId);
+      throw error;
+    }
   }
 }

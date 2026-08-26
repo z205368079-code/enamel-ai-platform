@@ -10,6 +10,12 @@ export interface ConversationRepository {
     chatwootConversationId: string,
     maxkbChatId: string,
   ): Promise<void>;
+  withMaxKBSession<T>(
+    chatwootConversationId: string,
+    operation: (
+      maxkbChatId: string | undefined,
+    ) => Promise<{ value: T; nextMaxKBChatId?: string | undefined }>,
+  ): Promise<T>;
 }
 
 export class PostgresConversationRepository implements ConversationRepository {
@@ -55,6 +61,43 @@ export class PostgresConversationRepository implements ConversationRepository {
       [chatwootConversationId, maxkbChatId],
     );
   }
+
+  async withMaxKBSession<T>(
+    chatwootConversationId: string,
+    operation: (
+      maxkbChatId: string | undefined,
+    ) => Promise<{ value: T; nextMaxKBChatId?: string | undefined }>,
+  ): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        chatwootConversationId,
+      ]);
+      const current = await client.query<{ maxkb_chat_id: string | null }>(
+        'SELECT maxkb_chat_id FROM conversations WHERE chatwoot_conversation_id = $1',
+        [chatwootConversationId],
+      );
+      const operationResult = await operation(
+        current.rows[0]?.maxkb_chat_id ?? undefined,
+      );
+      if (operationResult.nextMaxKBChatId !== undefined) {
+        await client.query(
+          `UPDATE conversations
+           SET maxkb_chat_id = $2, updated_at = CURRENT_TIMESTAMP
+           WHERE chatwoot_conversation_id = $1`,
+          [chatwootConversationId, operationResult.nextMaxKBChatId],
+        );
+      }
+      await client.query('COMMIT');
+      return operationResult.value;
+    } catch (error: unknown) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 }
 
 export class UnavailableConversationRepository implements ConversationRepository {
@@ -71,6 +114,12 @@ export class UnavailableConversationRepository implements ConversationRepository
   }
 
   async setMaxKBChatId(): Promise<void> {
+    throw new ConfigurationError(
+      'DATABASE_URL is required for webhook processing.',
+    );
+  }
+
+  async withMaxKBSession<T>(): Promise<T> {
     throw new ConfigurationError(
       'DATABASE_URL is required for webhook processing.',
     );

@@ -7,6 +7,7 @@ import { KnowledgeAnswerService } from '../src/services/knowledge-answer-service
 import {
   InMemoryConversationRepository,
   InMemoryAiRunRepository,
+  InMemoryWebhookMessageRepository,
   RecordingChatwootClient,
   RecordingLogger,
   RecordingMaxKBClient,
@@ -18,9 +19,11 @@ function createTestContext() {
   const logger = new RecordingLogger();
   const maxkbClient = new RecordingMaxKBClient();
   const aiRunRepository = new InMemoryAiRunRepository();
+  const webhookMessages = new InMemoryWebhookMessageRepository();
   const app = createApp({
     webhookService: new ChatwootWebhookService(
       repository,
+      webhookMessages,
       new KnowledgeAnswerService(maxkbClient, aiRunRepository, logger),
       client,
       logger,
@@ -28,7 +31,15 @@ function createTestContext() {
     logger,
   });
 
-  return { app, repository, client, logger, maxkbClient, aiRunRepository };
+  return {
+    app,
+    repository,
+    client,
+    logger,
+    maxkbClient,
+    aiRunRepository,
+    webhookMessages,
+  };
 }
 
 function customerTextMessage(overrides: Record<string, unknown> = {}) {
@@ -105,6 +116,87 @@ describe('POST /webhooks/chatwoot', () => {
     expect(maxkbClient.inputs).toHaveLength(1);
   });
 
+  it('acknowledges a duplicate message without a second MaxKB call or reply', async () => {
+    const { app, client, maxkbClient } = createTestContext();
+
+    await request(app).post('/webhooks/chatwoot').send(customerTextMessage());
+    const response = await request(app)
+      .post('/webhooks/chatwoot')
+      .send(customerTextMessage());
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      status: 'ignored',
+      reason: 'duplicate_message',
+    });
+    expect(maxkbClient.inputs).toHaveLength(1);
+    expect(client.inputs).toHaveLength(1);
+  });
+
+  it('claims concurrent duplicate deliveries only once', async () => {
+    const { app, client, maxkbClient } = createTestContext();
+
+    const [first, second] = await Promise.all([
+      request(app).post('/webhooks/chatwoot').send(customerTextMessage()),
+      request(app).post('/webhooks/chatwoot').send(customerTextMessage()),
+    ]);
+
+    expect([first.status, second.status]).toEqual([200, 200]);
+    expect([first.body.status, second.body.status].sort()).toEqual([
+      'ignored',
+      'processed',
+    ]);
+    expect(maxkbClient.inputs).toHaveLength(1);
+    expect(client.inputs).toHaveLength(1);
+  });
+
+  it('serializes MaxKB session initialization for concurrent messages in one conversation', async () => {
+    const repository = new InMemoryConversationRepository();
+    const client = new RecordingChatwootClient();
+    const logger = new RecordingLogger();
+    const maxkbInputs: Array<{ maxkbChatId?: string | undefined }> = [];
+    const app = createApp({
+      webhookService: new ChatwootWebhookService(
+        repository,
+        new InMemoryWebhookMessageRepository(),
+        new KnowledgeAnswerService(
+          {
+            answer: async (input) => {
+              maxkbInputs.push({ maxkbChatId: input.maxkbChatId });
+              return {
+                answer: '知识库回答',
+                latencyMs: 1,
+                ...(input.maxkbChatId === undefined
+                  ? { maxkbChatId: 'actual-session-id' }
+                  : {}),
+              };
+            },
+          },
+          new InMemoryAiRunRepository(),
+          logger,
+        ),
+        client,
+        logger,
+      ),
+      logger,
+    });
+
+    await Promise.all([
+      request(app)
+        .post('/webhooks/chatwoot')
+        .send(customerTextMessage({ id: 201 })),
+      request(app)
+        .post('/webhooks/chatwoot')
+        .send(customerTextMessage({ id: 202 })),
+    ]);
+
+    expect(maxkbInputs).toEqual([
+      { maxkbChatId: undefined },
+      { maxkbChatId: 'actual-session-id' },
+    ]);
+    expect(repository.maxkbChatIds.get('202')).toBe('actual-session-id');
+  });
+
   it.each([
     ['bot', { sender_type: 'Bot' }],
     ['system', { sender_type: 'System' }],
@@ -156,5 +248,17 @@ describe('POST /webhooks/chatwoot', () => {
     expect(repository.inputs).toHaveLength(0);
     expect(client.inputs).toHaveLength(0);
     expect(maxkbClient.inputs).toHaveLength(0);
+  });
+
+  it('does not log webhook question, answer, or credentials', async () => {
+    const { app, logger } = createTestContext();
+    await request(app)
+      .post('/webhooks/chatwoot')
+      .send(customerTextMessage({ content: '私人问题 application-test-key' }));
+
+    const logs = JSON.stringify(logger.infoEntries);
+    expect(logs).not.toContain('私人问题');
+    expect(logs).not.toContain('application-test-key');
+    expect(logs).not.toContain('来自 MaxKB 的知识库回答。');
   });
 });

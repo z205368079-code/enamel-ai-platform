@@ -19,6 +19,7 @@ COPY apps/gateway/package.json apps/gateway/package.json
 RUN npm ci --omit=dev --workspace @enamel-ai/gateway && npm cache clean --force
 
 COPY --from=build /app/apps/gateway/dist apps/gateway/dist
+COPY infra/postgres/migrations infra/postgres/migrations
 
 USER node
 EXPOSE 3000

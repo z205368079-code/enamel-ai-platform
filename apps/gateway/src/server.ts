@@ -24,6 +24,10 @@ import {
   NoopAiRunRepository,
   PostgresAiRunRepository,
 } from './repositories/ai-run-repository.js';
+import {
+  PostgresWebhookMessageRepository,
+  UnavailableWebhookMessageRepository,
+} from './repositories/webhook-message-repository.js';
 import { ChatwootWebhookService } from './services/chatwoot-webhook-service.js';
 import { KnowledgeAnswerService } from './services/knowledge-answer-service.js';
 
@@ -41,6 +45,9 @@ const chatwootClient = chatwootConfig
 const aiRunRepository = databaseUrl
   ? new PostgresAiRunRepository(databaseUrl)
   : new NoopAiRunRepository();
+const webhookMessageRepository = databaseUrl
+  ? new PostgresWebhookMessageRepository(databaseUrl)
+  : new UnavailableWebhookMessageRepository();
 const knowledgeAnswerService = new KnowledgeAnswerService(
   maxkbConfig ? new HttpMaxKBClient(maxkbConfig) : new UnavailableMaxKBClient(),
   aiRunRepository,
@@ -48,6 +55,7 @@ const knowledgeAnswerService = new KnowledgeAnswerService(
 );
 const webhookService = new ChatwootWebhookService(
   conversationRepository,
+  webhookMessageRepository,
   knowledgeAnswerService,
   chatwootClient,
   logger,

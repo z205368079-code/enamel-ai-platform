@@ -79,3 +79,21 @@ MaxKB v2 首次响应可在 `choices[0].chat_id` 返回真正的 MaxKB 会话 ID
 `conversations` 保存 `id`、`chatwoot_conversation_id`、`contact_id`、`mode`、实际响应回填的 nullable `maxkb_chat_id` 与时间戳；同一 Chatwoot conversation 通过唯一键 upsert。`ai_runs` 保存问题、可空答案、状态、延迟、错误码与关联的本地 conversation，便于演示链路审计。`handoff_events` 与 `knowledge_gaps` 仍留待后续阶段设计。
 
 所有真实 API Key、Token 和密码必须由本地 `.env` 或部署环境注入；仓库只保留无敏感信息的 `.env.example`。
+
+## 6. Reliability Hardening
+
+### ADR-0007：轻量版本化 migration
+
+SQL migration 按版本记录在 `infra/postgres/migrations/`，`schema_migrations` 表只记录成功执行的版本。runner 逐个事务执行未应用 migration；已存在的 Phase 1 `conversations` 表先保留数据，再由 `002` 增加 MaxKB 与运行审计结构。Compose 的 `migrate` job 必须成功后 Gateway 才启动。
+
+### ADR-0008：数据库级 webhook 幂等
+
+`processed_webhook_messages.message_id` 是主键。Gateway 先用 `INSERT ... ON CONFLICT DO NOTHING` 原子认领消息，再触发外部调用；认领失败直接返回安全 2xx。处理失败时删除认领记录，以便 Chatwoot 后续投递可重试。
+
+### ADR-0009：MaxKB session 初始化串行化
+
+同一个 Chatwoot conversation 使用 `pg_advisory_xact_lock(hashtext(conversation_id))` 取得事务级锁。锁内读取现有真实 `maxkb_chat_id`、调用 MaxKB 并仅在响应提供真实 ID 时更新；因此并发消息不会各自初始化不同的 MaxKB session。该锁只覆盖一次外部调用，适合低并发 PoC，不替代生产级队列设计。
+
+### Retry 与隐私边界
+
+MaxKB 最多重试一次，仅重试 timeout、network error、HTTP 408、429 和 5xx；400、401、403、404 及无效响应不重试。运行日志不输出完整 webhook payload、question、answer 或认证信息。PoC 数据库可保留 question/answer 做面试审计；生产上线前必须定义 retention、masking、删除与最小权限策略。

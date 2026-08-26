@@ -7,6 +7,7 @@ import { KnowledgeAnswerService } from '../src/services/knowledge-answer-service
 import {
   InMemoryConversationRepository,
   InMemoryAiRunRepository,
+  InMemoryWebhookMessageRepository,
   RecordingChatwootClient,
   RecordingLogger,
   RecordingMaxKBClient,
@@ -19,6 +20,7 @@ describe('GET /health', () => {
       createApp({
         webhookService: new ChatwootWebhookService(
           new InMemoryConversationRepository(),
+          new InMemoryWebhookMessageRepository(),
           new KnowledgeAnswerService(
             new RecordingMaxKBClient(),
             new InMemoryAiRunRepository(),

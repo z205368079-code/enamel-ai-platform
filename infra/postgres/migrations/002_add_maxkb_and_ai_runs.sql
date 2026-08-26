@@ -1,3 +1,6 @@
+ALTER TABLE conversations
+  ADD COLUMN IF NOT EXISTS maxkb_chat_id TEXT NULL;
+
 CREATE TABLE IF NOT EXISTS ai_runs (
   id BIGSERIAL PRIMARY KEY,
   conversation_id BIGINT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,

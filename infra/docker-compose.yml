@@ -15,7 +15,19 @@ services:
       retries: 10
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: apps/gateway/Dockerfile
+    command: ['node', 'apps/gateway/dist/cli/migrate.js']
+    restart: 'no'
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://enamel_ai:change_me_for_local_dev@postgres:5432/enamel_ai}
+      MIGRATIONS_DIR: /app/infra/postgres/migrations
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   gateway:
     build:
@@ -38,8 +50,8 @@ services:
       MAXKB_MAX_RETRIES: ${MAXKB_MAX_RETRIES:-1}
       MAXKB_RETRY_DELAY_MS: ${MAXKB_RETRY_DELAY_MS:-200}
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     ports:
       - '${GATEWAY_PORT:-3000}:3000'
     healthcheck:

@@ -3,7 +3,6 @@ CREATE TABLE IF NOT EXISTS conversations (
   chatwoot_conversation_id TEXT NOT NULL UNIQUE,
   contact_id TEXT NOT NULL,
   mode TEXT NOT NULL DEFAULT 'AI' CHECK (mode = 'AI'),
-  maxkb_chat_id TEXT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
