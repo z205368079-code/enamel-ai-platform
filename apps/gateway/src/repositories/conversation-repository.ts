@@ -5,6 +5,11 @@ import { ConfigurationError } from '../errors.js';
 
 export interface ConversationRepository {
   upsert(input: ConversationUpsertInput): Promise<void>;
+  getMaxKBChatId(chatwootConversationId: string): Promise<string | undefined>;
+  setMaxKBChatId(
+    chatwootConversationId: string,
+    maxkbChatId: string,
+  ): Promise<void>;
 }
 
 export class PostgresConversationRepository implements ConversationRepository {
@@ -28,10 +33,44 @@ export class PostgresConversationRepository implements ConversationRepository {
       [input.chatwootConversationId, input.contactId, input.mode],
     );
   }
+
+  async getMaxKBChatId(
+    chatwootConversationId: string,
+  ): Promise<string | undefined> {
+    const result = await this.pool.query<{ maxkb_chat_id: string | null }>(
+      'SELECT maxkb_chat_id FROM conversations WHERE chatwoot_conversation_id = $1',
+      [chatwootConversationId],
+    );
+    return result.rows[0]?.maxkb_chat_id ?? undefined;
+  }
+
+  async setMaxKBChatId(
+    chatwootConversationId: string,
+    maxkbChatId: string,
+  ): Promise<void> {
+    await this.pool.query(
+      `UPDATE conversations
+       SET maxkb_chat_id = $2, updated_at = CURRENT_TIMESTAMP
+       WHERE chatwoot_conversation_id = $1`,
+      [chatwootConversationId, maxkbChatId],
+    );
+  }
 }
 
 export class UnavailableConversationRepository implements ConversationRepository {
   async upsert(): Promise<void> {
+    throw new ConfigurationError(
+      'DATABASE_URL is required for webhook processing.',
+    );
+  }
+
+  async getMaxKBChatId(): Promise<string | undefined> {
+    throw new ConfigurationError(
+      'DATABASE_URL is required for webhook processing.',
+    );
+  }
+
+  async setMaxKBChatId(): Promise<void> {
     throw new ConfigurationError(
       'DATABASE_URL is required for webhook processing.',
     );

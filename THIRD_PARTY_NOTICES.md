@@ -6,21 +6,21 @@
 
 Node.js 依赖及其精确版本由 `package-lock.json` 记录。安装或分发前应使用依赖审计工具重新检查许可证与安全公告。
 
-## 计划集成但未复制到本仓库的服务
+## 集成但未复制到本仓库的服务
 
 ### Chatwoot
 
 - 上游项目：https://github.com/chatwoot/chatwoot
-- 用途：计划在 Phase 1 作为独立客服系统，通过 Webhook/API 与 Gateway 集成。
+- 用途：Phase 1 起作为独立客服系统，通过 Webhook/API 与 Gateway 集成。
 - 许可证：上游公开仓库说明，`enterprise/` 目录之外的代码通常采用 MIT Expat License；企业目录及第三方组件适用各自许可证。
-- Phase 0 状态：未包含 Chatwoot 源码、镜像或修改内容。
+- 当前状态：未包含 Chatwoot 源码、镜像或修改内容。
 
 ### MaxKB
 
 - 上游项目：https://github.com/1Panel-dev/MaxKB
-- 用途：计划在 Phase 2 作为独立知识库/RAG 服务，通过 API 与 Gateway 集成。
+- 用途：Phase 2 起作为独立知识库/RAG 服务，通过 Application API 与 Gateway 集成。
 - 许可证：GNU General Public License v3.0（GPL-3.0）。
-- Phase 0 状态：未包含 MaxKB 源码、镜像或修改内容。
+- 当前状态：未包含 MaxKB 源码、镜像或修改内容；Gateway 只进行 HTTP API 调用。
 
 ## 合规约定
 

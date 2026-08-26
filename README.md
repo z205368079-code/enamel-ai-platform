@@ -2,24 +2,25 @@
 
 用于珐琅锅企业 AI 应用与客服知识库技术面试展示的集成型 PoC（概念验证）。项目重点是清晰展示开源选型、系统集成、API 边界、Docker 部署和后续 AI/人工协作设计，而不是开发完整商业 SaaS。
 
-## Phase 1 当前能力
+## Phase 2 当前能力
 
 - Node.js + TypeScript AI Gateway
 - `GET /health` 存活检查
 - `POST /webhooks/chatwoot` Webhook 接收入口
-- Chatwoot 客户文本消息筛选、Conversation 持久化与 Mock AI 回复
+- Chatwoot 客户文本消息筛选、Conversation 持久化与 MaxKB 知识库回复
 - 独立 Chatwoot API Client（timeout、错误分类与延迟记录）
-- PostgreSQL 15 基础服务与 `conversations` 表初始化
+- 独立 MaxKB Application API Client（timeout、有限重试、错误分类与延迟记录）
+- PostgreSQL 15 基础服务与 `conversations`、`ai_runs` 表初始化
 - Docker Compose 本地编排
 - ESLint、Prettier、TypeScript strict、Vitest
 
-以下能力尚未实现：MaxKB API、真实 LLM 调用、Human Handoff、统计接口和 Dashboard。
+以下能力尚未实现：Human Handoff、统计接口和 Dashboard。Gateway 不直接调用 LLM；知识库回答只来自 MaxKB。
 
 ## 架构边界
 
 - **本仓库自行维护**：AI Gateway、集成层、配置、Docker 编排、测试和项目文档。
 - **第三方开源组件**：Chatwoot（客服系统）与 MaxKB（知识库/RAG）。本仓库不复制或魔改它们的核心源码。
-- **Phase 1**：Gateway 已能处理 Chatwoot Webhook，并使用 Chatwoot API 发送 Mock 回复。MaxKB 仍只作为后续阶段规划。
+- **Phase 2**：Gateway 已能处理 Chatwoot Webhook，通过 MaxKB 应用 API 获取知识库答案，再用 Chatwoot API 回帖。
 
 详细说明见 [`docs/architecture.md`](docs/architecture.md)。
 
@@ -55,16 +56,22 @@ Compose 会启动：
 - `postgres`：业务数据持久化基础设施，并在新数据卷首次启动时创建 `conversations` 表。
 - `gateway`：等待 PostgreSQL 健康后启动，并暴露端口 `3000`。
 
-### Chatwoot 配置与数据流
+### Chatwoot 与 MaxKB 配置及数据流
 
-Phase 1 需要在本地 `.env` 或部署环境中提供以下变量后，才会实际向 Chatwoot 回帖：
+在本地 `.env` 或部署环境中配置：
 
 ```text
 CHATWOOT_BASE_URL=https://your-chatwoot.example
 CHATWOOT_ACCOUNT_ID=your-account-id
 CHATWOOT_API_TOKEN=your-token
 CHATWOOT_REQUEST_TIMEOUT_MS=5000
+MAXKB_BASE_URL=https://your-maxkb.example
+MAXKB_APP_ID=your-application-id
+MAXKB_API_KEY=application-your-key
+MAXKB_TIMEOUT_MS=10000
 ```
+
+默认 MaxKB v2 路径为 `POST /chat/api/{MAXKB_APP_ID}/chat/completions`。如部署改过 MaxKB `CHAT_PATH`，可提供完整的 `MAXKB_CHAT_COMPLETIONS_URL` 覆盖默认路径。真实 Key 只放在 `.env` 或部署密钥管理中。
 
 收到 `message_created` 后，Gateway 只处理客户发送的 `incoming` 文本消息：
 
@@ -72,11 +79,14 @@ CHATWOOT_REQUEST_TIMEOUT_MS=5000
 Chatwoot customer message
 → POST /webhooks/chatwoot
 → conversations upsert (mode=AI)
+→ MaxKB Application API (stream=false)
+→ ai_runs audit record
 → Chatwoot API outgoing message
-→ "[Demo AI] 已收到您的问题：..."
 ```
 
-`outgoing`、bot、system、非文本与非目标事件都会安全返回 2xx 而不调用下游服务，因此 Gateway 自己发出的回复不会形成 webhook 循环。
+MaxKB 成功返回的 `choices[0].chat_id` 才会写入本地 `conversations.maxkb_chat_id`，并只在下一条同会话消息中传回；Gateway 不生成或猜测 MaxKB 会话 ID。`outgoing`、bot、system、非文本与非目标事件都会安全返回 2xx 而不调用下游服务，因此 Gateway 自己发出的回复不会形成 webhook 循环。
+
+MaxKB 无可用答案或上游异常时，Gateway 不调用 LLM 兜底，而是回帖受控文案：`暂时无法从知识库中找到可靠答案，请稍后重试或联系人工客服。`
 
 ## 质量检查
 
@@ -94,7 +104,7 @@ docker compose -f infra/docker-compose.yml config
 ## Built With / Acknowledgements
 
 - [Chatwoot](https://github.com/chatwoot/chatwoot)：计划用于客服会话和人工坐席，第三方项目。
-- [MaxKB](https://github.com/1Panel-dev/MaxKB)：计划用于企业知识库和 RAG，第三方项目。
+- [MaxKB](https://github.com/1Panel-dev/MaxKB)：企业知识库/RAG，作为独立第三方 API 服务集成。
 - Node.js、TypeScript、Express、PostgreSQL 与 Docker Compose。
 
 许可证和归属说明见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。第三方作者不会被标记为本仓库提交的共同作者。

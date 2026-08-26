@@ -3,22 +3,32 @@ import { describe, expect, it } from 'vitest';
 
 import { createApp } from '../src/app.js';
 import { ChatwootWebhookService } from '../src/services/chatwoot-webhook-service.js';
+import { KnowledgeAnswerService } from '../src/services/knowledge-answer-service.js';
 import {
   InMemoryConversationRepository,
+  InMemoryAiRunRepository,
   RecordingChatwootClient,
   RecordingLogger,
+  RecordingMaxKBClient,
 } from './test-doubles.js';
 
 function createTestContext() {
   const repository = new InMemoryConversationRepository();
   const client = new RecordingChatwootClient();
   const logger = new RecordingLogger();
+  const maxkbClient = new RecordingMaxKBClient();
+  const aiRunRepository = new InMemoryAiRunRepository();
   const app = createApp({
-    webhookService: new ChatwootWebhookService(repository, client, logger),
+    webhookService: new ChatwootWebhookService(
+      repository,
+      new KnowledgeAnswerService(maxkbClient, aiRunRepository, logger),
+      client,
+      logger,
+    ),
     logger,
   });
 
-  return { app, repository, client, logger };
+  return { app, repository, client, logger, maxkbClient, aiRunRepository };
 }
 
 function customerTextMessage(overrides: Record<string, unknown> = {}) {
@@ -35,8 +45,9 @@ function customerTextMessage(overrides: Record<string, unknown> = {}) {
 }
 
 describe('POST /webhooks/chatwoot', () => {
-  it('persists a customer text conversation and sends a mock AI reply', async () => {
-    const { app, repository, client, logger } = createTestContext();
+  it('persists a customer text conversation and sends a MaxKB answer', async () => {
+    const { app, repository, client, logger, maxkbClient, aiRunRepository } =
+      createTestContext();
 
     const response = await request(app)
       .post('/webhooks/chatwoot')
@@ -50,20 +61,28 @@ describe('POST /webhooks/chatwoot', () => {
     expect(client.inputs).toEqual([
       {
         conversationId: '202',
-        content: '[Demo AI] 已收到您的问题：锅具可以进烤箱吗？',
+        content: '来自 MaxKB 的知识库回答。',
       },
     ]);
-    expect(logger.infoEntries[0]).toMatchObject({
+    expect(logger.infoEntries.at(-1)).toMatchObject({
       eventType: 'message_created',
       conversationId: '202',
       messageId: '101',
       processingResult: 'processed',
       chatwootLatencyMs: 12,
     });
+    expect(maxkbClient.inputs).toEqual([
+      { question: '锅具可以进烤箱吗？', maxkbChatId: undefined },
+    ]);
+    expect(aiRunRepository.inputs[0]).toMatchObject({
+      chatwootConversationId: '202',
+      messageId: '101',
+      status: 'SUCCESS',
+    });
   });
 
   it('ignores outgoing messages so the gateway reply cannot form a webhook loop', async () => {
-    const { app, repository, client } = createTestContext();
+    const { app, repository, client, maxkbClient } = createTestContext();
 
     await request(app).post('/webhooks/chatwoot').send(customerTextMessage());
     const response = await request(app)
@@ -83,13 +102,14 @@ describe('POST /webhooks/chatwoot', () => {
     });
     expect(repository.inputs).toHaveLength(1);
     expect(client.inputs).toHaveLength(1);
+    expect(maxkbClient.inputs).toHaveLength(1);
   });
 
   it.each([
     ['bot', { sender_type: 'Bot' }],
     ['system', { sender_type: 'System' }],
   ])('ignores %s messages', async (_label, overrides) => {
-    const { app, repository, client } = createTestContext();
+    const { app, repository, client, maxkbClient } = createTestContext();
 
     const response = await request(app)
       .post('/webhooks/chatwoot')
@@ -102,10 +122,11 @@ describe('POST /webhooks/chatwoot', () => {
     });
     expect(repository.inputs).toHaveLength(0);
     expect(client.inputs).toHaveLength(0);
+    expect(maxkbClient.inputs).toHaveLength(0);
   });
 
   it('acknowledges a non-target event without calling downstream services', async () => {
-    const { app, repository, client } = createTestContext();
+    const { app, repository, client, maxkbClient } = createTestContext();
 
     const response = await request(app)
       .post('/webhooks/chatwoot')
@@ -118,10 +139,11 @@ describe('POST /webhooks/chatwoot', () => {
     });
     expect(repository.inputs).toHaveLength(0);
     expect(client.inputs).toHaveLength(0);
+    expect(maxkbClient.inputs).toHaveLength(0);
   });
 
   it('returns 400 for a malformed target payload', async () => {
-    const { app, repository, client } = createTestContext();
+    const { app, repository, client, maxkbClient } = createTestContext();
 
     const response = await request(app).post('/webhooks/chatwoot').send({
       event: 'message_created',
@@ -133,5 +155,6 @@ describe('POST /webhooks/chatwoot', () => {
     expect(response.body.status).toBe('invalid');
     expect(repository.inputs).toHaveLength(0);
     expect(client.inputs).toHaveLength(0);
+    expect(maxkbClient.inputs).toHaveLength(0);
   });
 });

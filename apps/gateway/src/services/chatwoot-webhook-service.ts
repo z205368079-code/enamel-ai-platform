@@ -4,6 +4,7 @@ import type { IncomingChatwootMessage } from '../domain/chatwoot.js';
 import { WebhookValidationError } from '../errors.js';
 import type { Logger } from '../logging/logger.js';
 import type { ConversationRepository } from '../repositories/conversation-repository.js';
+import type { KnowledgeAnswerService } from './knowledge-answer-service.js';
 
 export interface WebhookProcessingResult {
   status: 'processed' | 'ignored';
@@ -115,6 +116,7 @@ export function parseIncomingChatwootMessage(
 export class ChatwootWebhookService {
   constructor(
     private readonly conversationRepository: ConversationRepository,
+    private readonly knowledgeAnswerService: KnowledgeAnswerService,
     private readonly chatwootClient: ChatwootClient,
     private readonly logger: Logger,
   ) {}
@@ -138,10 +140,26 @@ export class ChatwootWebhookService {
       mode: CONVERSATION_MODE.AI,
     });
 
-    const reply = `[Demo AI] 已收到您的问题：${parsed.content}`;
+    const maxkbChatId = await this.conversationRepository.getMaxKBChatId(
+      parsed.conversationId,
+    );
+    const knowledgeAnswer = await this.knowledgeAnswerService.answerFor({
+      chatwootConversationId: parsed.conversationId,
+      messageId: parsed.messageId,
+      question: parsed.content,
+      maxkbChatId,
+    });
+
+    if (knowledgeAnswer.maxkbChatId !== undefined) {
+      await this.conversationRepository.setMaxKBChatId(
+        parsed.conversationId,
+        knowledgeAnswer.maxkbChatId,
+      );
+    }
+
     const result = await this.chatwootClient.sendConversationMessage({
       conversationId: parsed.conversationId,
-      content: reply,
+      content: knowledgeAnswer.answer,
     });
 
     this.logger.info(
@@ -150,6 +168,9 @@ export class ChatwootWebhookService {
         conversationId: parsed.conversationId,
         messageId: parsed.messageId,
         processingResult: 'processed',
+        knowledgeStatus: knowledgeAnswer.status,
+        maxkbLatencyMs: knowledgeAnswer.latencyMs,
+        maxkbErrorCode: knowledgeAnswer.errorCode,
         chatwootLatencyMs: result.latencyMs,
       },
       'Chatwoot webhook processed.',
