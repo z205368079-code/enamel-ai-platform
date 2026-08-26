@@ -15,6 +15,7 @@ services:
       retries: 10
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
 
   gateway:
     build:
@@ -25,6 +26,10 @@ services:
       NODE_ENV: production
       GATEWAY_PORT: 3000
       DATABASE_URL: ${DATABASE_URL:-postgresql://enamel_ai:change_me_for_local_dev@postgres:5432/enamel_ai}
+      CHATWOOT_BASE_URL: ${CHATWOOT_BASE_URL:-}
+      CHATWOOT_ACCOUNT_ID: ${CHATWOOT_ACCOUNT_ID:-}
+      CHATWOOT_API_TOKEN: ${CHATWOOT_API_TOKEN:-}
+      CHATWOOT_REQUEST_TIMEOUT_MS: ${CHATWOOT_REQUEST_TIMEOUT_MS:-5000}
     depends_on:
       postgres:
         condition: service_healthy

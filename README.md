@@ -2,21 +2,24 @@
 
 用于珐琅锅企业 AI 应用与客服知识库技术面试展示的集成型 PoC（概念验证）。项目重点是清晰展示开源选型、系统集成、API 边界、Docker 部署和后续 AI/人工协作设计，而不是开发完整商业 SaaS。
 
-## Phase 0 当前能力
+## Phase 1 当前能力
 
 - Node.js + TypeScript AI Gateway
 - `GET /health` 存活检查
-- PostgreSQL 15 基础服务
+- `POST /webhooks/chatwoot` Webhook 接收入口
+- Chatwoot 客户文本消息筛选、Conversation 持久化与 Mock AI 回复
+- 独立 Chatwoot API Client（timeout、错误分类与延迟记录）
+- PostgreSQL 15 基础服务与 `conversations` 表初始化
 - Docker Compose 本地编排
 - ESLint、Prettier、TypeScript strict、Vitest
 
-以下能力尚未实现：Chatwoot Webhook、MaxKB API、Human Handoff、业务数据库表和统计接口。
+以下能力尚未实现：MaxKB API、真实 LLM 调用、Human Handoff、统计接口和 Dashboard。
 
 ## 架构边界
 
 - **本仓库自行维护**：AI Gateway、集成层、配置、Docker 编排、测试和项目文档。
 - **第三方开源组件**：Chatwoot（客服系统）与 MaxKB（知识库/RAG）。本仓库不复制或魔改它们的核心源码。
-- **Phase 0**：仅运行 Gateway 与 PostgreSQL。Chatwoot、MaxKB 只作为后续阶段的架构规划存在。
+- **Phase 1**：Gateway 已能处理 Chatwoot Webhook，并使用 Chatwoot API 发送 Mock 回复。MaxKB 仍只作为后续阶段规划。
 
 详细说明见 [`docs/architecture.md`](docs/architecture.md)。
 
@@ -49,8 +52,31 @@ docker compose -f infra/docker-compose.yml up --build
 
 Compose 会启动：
 
-- `postgres`：业务数据持久化基础设施（Phase 0 尚未创建业务表）。
+- `postgres`：业务数据持久化基础设施，并在新数据卷首次启动时创建 `conversations` 表。
 - `gateway`：等待 PostgreSQL 健康后启动，并暴露端口 `3000`。
+
+### Chatwoot 配置与数据流
+
+Phase 1 需要在本地 `.env` 或部署环境中提供以下变量后，才会实际向 Chatwoot 回帖：
+
+```text
+CHATWOOT_BASE_URL=https://your-chatwoot.example
+CHATWOOT_ACCOUNT_ID=your-account-id
+CHATWOOT_API_TOKEN=your-token
+CHATWOOT_REQUEST_TIMEOUT_MS=5000
+```
+
+收到 `message_created` 后，Gateway 只处理客户发送的 `incoming` 文本消息：
+
+```text
+Chatwoot customer message
+→ POST /webhooks/chatwoot
+→ conversations upsert (mode=AI)
+→ Chatwoot API outgoing message
+→ "[Demo AI] 已收到您的问题：..."
+```
+
+`outgoing`、bot、system、非文本与非目标事件都会安全返回 2xx 而不调用下游服务，因此 Gateway 自己发出的回复不会形成 webhook 循环。
 
 ## 质量检查
 
