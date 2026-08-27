@@ -8,6 +8,7 @@ import type { WebhookMessageRepository } from '../repositories/webhook-message-r
 import type { KnowledgeAnswerService } from './knowledge-answer-service.js';
 import { HumanHandoffService } from './human-handoff-service.js';
 import type { AnalyticsService } from './analytics-service.js';
+import type { DeepSeekFallbackService } from './deepseek-fallback-service.js';
 
 export interface WebhookProcessingResult {
   status: 'processed' | 'ignored';
@@ -125,6 +126,7 @@ export class ChatwootWebhookService {
     private readonly chatwootClient: ChatwootClient,
     private readonly logger: Logger,
     private readonly analyticsService?: AnalyticsService,
+    private readonly deepSeekFallbackService?: DeepSeekFallbackService,
   ) {}
 
   async process(payload: unknown): Promise<WebhookProcessingResult> {
@@ -190,13 +192,24 @@ export class ChatwootWebhookService {
         await this.conversationRepository.withMaxKBSession(
           parsed.conversationId,
           async (maxkbChatId) => {
-            const answer = await this.knowledgeAnswerService.answerFor({
+            const maxkbAnswer = await this.knowledgeAnswerService.answerFor({
               chatwootConversationId: parsed.conversationId,
               messageId: parsed.messageId,
               question: parsed.content,
               maxkbChatId,
             });
-            return { value: answer, nextMaxKBChatId: answer.maxkbChatId };
+            const fallbackAnswer =
+              maxkbAnswer.status === 'NO_ANSWER'
+                ? await this.deepSeekFallbackService?.answerFor({
+                    chatwootConversationId: parsed.conversationId,
+                    messageId: parsed.messageId,
+                    question: parsed.content,
+                  })
+                : undefined;
+            return {
+              value: fallbackAnswer ?? maxkbAnswer,
+              nextMaxKBChatId: maxkbAnswer.maxkbChatId,
+            };
           },
         );
 
@@ -233,8 +246,9 @@ export class ChatwootWebhookService {
           messageId: parsed.messageId,
           processingResult: 'processed',
           knowledgeStatus: knowledgeAnswer.status,
-          maxkbLatencyMs: knowledgeAnswer.latencyMs,
-          maxkbErrorCode: knowledgeAnswer.errorCode,
+          aiProvider: knowledgeAnswer.provider,
+          aiLatencyMs: knowledgeAnswer.latencyMs,
+          aiErrorCode: knowledgeAnswer.errorCode,
           chatwootLatencyMs: result.latencyMs,
         },
         'Chatwoot webhook processed.',

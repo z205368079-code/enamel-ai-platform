@@ -23,7 +23,7 @@
 - Docker Compose 本地编排
 - ESLint、Prettier、TypeScript strict、Vitest
 
-以下能力尚未实现：统计接口和 Dashboard。Gateway 不直接调用 LLM；知识库回答只来自 MaxKB。
+以下能力尚未实现：Dashboard。Gateway 优先使用 MaxKB；仅在 MaxKB 明确无答案时可选调用 DeepSeek 通用兜底。
 
 ## 架构边界
 
@@ -95,6 +95,19 @@ MAXKB_TIMEOUT_MS=10000
 
 默认 MaxKB v2 路径为 `POST /chat/api/{MAXKB_APP_ID}/chat/completions`。如部署改过 MaxKB `CHAT_PATH`，可提供完整的 `MAXKB_CHAT_COMPLETIONS_URL` 覆盖默认路径。真实 Key 只放在 `.env` 或部署密钥管理中。
 
+### Optional DeepSeek fallback
+
+当 MaxKB 明确返回 `NO_ANSWER` 时，Gateway 可选择调用 DeepSeek 的 OpenAI-compatible Chat Completions API。高风险和客户主动要求人工的问题会在调用任何 AI 前直接转人工；MaxKB 的网络、超时或 API 错误仍沿用原有失败转人工策略，而不会触发 DeepSeek 兜底。
+
+```env
+DEEPSEEK_API_KEY=replace-with-a-local-secret
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-v4-flash
+DEEPSEEK_TIMEOUT_MS=10000
+```
+
+DeepSeek 兜底只提供通用、谨慎的使用建议，并提醒客户以产品说明书为准；不承诺产品参数、售后、赔偿、退款或法律责任。未配置 `DEEPSEEK_API_KEY` 时，`NO_ANSWER` 保持原有的知识缺口记录与人工转接行为。
+
 收到 `message_created` 后，Gateway 只处理客户发送的 `incoming` 文本消息：
 
 ```text
@@ -102,6 +115,7 @@ Chatwoot customer message
 → POST /webhooks/chatwoot
 → conversations upsert (mode=AI)
 → MaxKB Application API (stream=false)
+→ MaxKB answer, or explicit NO_ANSWER → optional DeepSeek fallback
 → ai_runs audit record
 → Chatwoot API outgoing message
 ```
@@ -110,11 +124,11 @@ MaxKB 成功返回的 `choices[0].chat_id` 才会写入本地 `conversations.max
 
 同一 `message_id` 由数据库唯一键认领：重复或并发重复 webhook 返回安全 2xx，不会再次调用 MaxKB 或回帖。针对同一 Chatwoot conversation，Gateway 使用 PostgreSQL 事务级 advisory lock 串行化 MaxKB session 初始化，避免竞争创建多个会话。
 
-MaxKB 无可用答案或上游异常时，Gateway 不调用 LLM 兜底，而是回帖受控文案：`暂时无法从知识库中找到可靠答案，请稍后重试或联系人工客服。`
+MaxKB 必须在检索内容无法支持产品问题时严格返回 `NO_ANSWER`；Gateway 只识别这一标记来触发可选 DeepSeek 兜底。未配置或兜底失败时，Gateway 记录知识缺口并转人工；MaxKB 上游异常也不会触发 DeepSeek。
 
 ### Human Handoff
 
-会话处于 `HUMAN` 后不再调用 MaxKB 或发送自动 AI 回复。客户明确请求人工、Demo 高风险关键词、`NO_ANSWER` 或连续失败达到阈值会触发接管。`POST /internal/conversations/:id/resume-ai` 仅供 Demo/internal use；完整规则见 [`docs/human-handoff.md`](docs/human-handoff.md)。
+会话处于 `HUMAN` 后不再调用 MaxKB、DeepSeek 或发送自动 AI 回复。客户明确请求人工、Demo 高风险关键词、`NO_ANSWER` 且 DeepSeek 未配置/失败、或连续失败达到阈值会触发接管。Chatwoot Widget 的邮箱收集由 Chatwoot 自身配置负责；`POST /internal/conversations/:id/resume-ai` 仅供 Demo/internal use。完整规则见 [`docs/human-handoff.md`](docs/human-handoff.md)。
 
 日志只保留事件类型、会话/消息标识、处理状态与延迟；不记录完整 payload、问题、回答、Authorization、API Key 或数据库密码。数据库中保留 question/answer 仅用于 PoC 面试审计。生产环境还应增加数据保留期限、访问控制、脱敏与删除策略。
 

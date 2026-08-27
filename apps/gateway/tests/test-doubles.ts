@@ -1,5 +1,9 @@
 import type { ChatwootClient } from '../src/clients/chatwoot-client.js';
 import type { MaxKBAnswer, MaxKBClient } from '../src/clients/maxkb-client.js';
+import type {
+  DeepSeekAnswer,
+  DeepSeekClient,
+} from '../src/clients/deepseek-client.js';
 import type { AiRunInput } from '../src/domain/ai-run.js';
 import type { ConversationUpsertInput } from '../src/domain/conversation.js';
 import {
@@ -155,6 +159,22 @@ export class RecordingMaxKBClient implements MaxKBClient {
     question: string;
     maxkbChatId?: string;
   }): Promise<MaxKBAnswer> {
+    this.inputs.push(input);
+    return this.result;
+  }
+}
+
+export class RecordingDeepSeekClient implements DeepSeekClient {
+  readonly inputs: Array<{ question: string }> = [];
+
+  constructor(
+    private readonly result: DeepSeekAnswer = {
+      answer: '来自 DeepSeek 的通用建议。',
+      latencyMs: 9,
+    },
+  ) {}
+
+  async answer(input: { question: string }): Promise<DeepSeekAnswer> {
     this.inputs.push(input);
     return this.result;
   }

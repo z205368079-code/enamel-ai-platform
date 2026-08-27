@@ -68,13 +68,15 @@ Phase 0 的 `GET /health` 是 liveness endpoint，不查询 PostgreSQL。数据�
 
 Gateway 仅接收 `event=message_created`、`message_type=incoming`、客户文本消息。Gateway 通过 Chatwoot API 发送的回复是 `outgoing`，再次回到 webhook 时会在解析层被安全忽略并返回 2xx，不会再次调用数据库或 Chatwoot API。
 
-### ADR-0006：MaxKB 应用 API 作为唯一回答来源
+### ADR-0006：MaxKB 优先、DeepSeek 受控兜底
 
 固定版本锚点为 MaxKB `v2.10.5-lts`（2026-08-06，commit `01b21db88145278d98bf5e9bd55e6abd6b3aad43`）。Gateway 使用应用 API Key 的非流式 OpenAI 兼容接口：`POST {MAXKB_BASE_URL}/chat/api/{MAXKB_APP_ID}/chat/completions`，`Authorization: Bearer <API key>`，请求体只包含 `messages`、可选真实 `chat_id` 与 `stream:false`。成功时严格读取 `choices[0].message.content`。
 
+当 MaxKB 返回 `NO_ANSWER` 且 `DEEPSEEK_API_KEY` 已配置时，Gateway 才调用 DeepSeek 的非流式 `POST https://api.deepseek.com/chat/completions` 作为通用知识兜底。高风险及客户明确请求人工在此之前已短路为 HUMAN；MaxKB 失败不会调用该兜底。DeepSeek 成功回答会记录为独立 AI run，但不会创建 knowledge gap。
+
 官方旧文档存在 `/api/application/...` 示例；当前固定版本源码默认使用 `/chat/api/...`。如部署改过 `CHAT_PATH`，以该实例 Swagger/实测为准，并用 `MAXKB_CHAT_COMPLETIONS_URL` 显式覆盖。Gateway 不调用需要实例专属 Swagger 才能确定合同的内部系统 API。
 
-MaxKB v2 首次响应可在 `choices[0].chat_id` 返回真正的 MaxKB 会话 ID；Gateway 只保存并复用这个响应值，绝不自造 session ID。无可用内容、超时、网络、HTTP、无效响应都写入受控状态并返回固定安全提示，不直接调用 LLM 或编造答案。
+MaxKB v2 首次响应可在 `choices[0].chat_id` 返回真正的 MaxKB 会话 ID；Gateway 只保存并复用这个响应值，绝不自造 session ID。MaxKB 应用提示词必须在检索无法支持答案时返回精确 `NO_ANSWER` 标记；无可用内容或该标记可进入 DeepSeek 兜底，超时、网络、HTTP、无效响应则写入受控状态并转人工，不调用 DeepSeek 或编造答案。
 
 ## 5. 数据边界
 

@@ -1,3 +1,5 @@
 # MaxKB Demo Setup
 
 Create an Application and a Knowledge Base in the current MaxKB v2 UI, then import the Markdown files in `demo-data/enamel-cookware/`. Use small heading-based chunks and verify normal, gap and high-risk questions. Obtain the Application API Key and App ID from the application settings, then set `MAXKB_BASE_URL`, `MAXKB_APP_ID` and `MAXKB_API_KEY` in local `.env`. UI labels may change; use the current v2 interface as authority.
+
+For this Gateway routing design, configure the application prompt to return exactly `NO_ANSWER` (with no additional text) when retrieved knowledge does not support the requested product fact. The Gateway recognizes that marker and, only then, may call the optional DeepSeek fallback. This keeps a generic model response from being mistaken for a knowledge-base answer. High-risk, compensation, refund, legal, injury, or major quality-complaint questions must not be answered by this prompt; they are routed to HUMAN by the Gateway before MaxKB is called.

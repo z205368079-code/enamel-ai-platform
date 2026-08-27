@@ -8,6 +8,7 @@ import {
   getOptionalChatwootConfig,
   getOptionalDatabaseUrl,
   getOptionalMaxKBConfig,
+  getOptionalDeepSeekConfig,
 } from './config/env.js';
 import {
   HttpChatwootClient,
@@ -17,6 +18,7 @@ import {
   HttpMaxKBClient,
   UnavailableMaxKBClient,
 } from './clients/maxkb-client.js';
+import { HttpDeepSeekClient } from './clients/deepseek-client.js';
 import { ConsoleLogger } from './logging/logger.js';
 import {
   PostgresConversationRepository,
@@ -34,6 +36,7 @@ import { ChatwootWebhookService } from './services/chatwoot-webhook-service.js';
 import { KnowledgeAnswerService } from './services/knowledge-answer-service.js';
 import { HumanHandoffService } from './services/human-handoff-service.js';
 import { AnalyticsService } from './services/analytics-service.js';
+import { DeepSeekFallbackService } from './services/deepseek-fallback-service.js';
 import {
   NoopAnalyticsRepository,
   PostgresAnalyticsRepository,
@@ -44,6 +47,7 @@ const logger = new ConsoleLogger();
 const databaseUrl = getOptionalDatabaseUrl();
 const chatwootConfig = getOptionalChatwootConfig();
 const maxkbConfig = getOptionalMaxKBConfig();
+const deepSeekConfig = getOptionalDeepSeekConfig();
 const handoffConfig = getHandoffConfig();
 const conversationRepository = databaseUrl
   ? new PostgresConversationRepository(databaseUrl)
@@ -62,6 +66,13 @@ const knowledgeAnswerService = new KnowledgeAnswerService(
   aiRunRepository,
   logger,
 );
+const deepSeekFallbackService = deepSeekConfig
+  ? new DeepSeekFallbackService(
+      new HttpDeepSeekClient(deepSeekConfig),
+      aiRunRepository,
+      logger,
+    )
+  : undefined;
 const handoffService = new HumanHandoffService(
   conversationRepository,
   chatwootClient,
@@ -82,6 +93,7 @@ const webhookService = new ChatwootWebhookService(
   chatwootClient,
   logger,
   analyticsService,
+  deepSeekFallbackService,
 );
 const app = createApp({
   webhookService,

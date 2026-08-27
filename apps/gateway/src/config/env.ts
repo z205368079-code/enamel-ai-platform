@@ -4,6 +4,9 @@ const DEFAULT_MAXKB_TIMEOUT_MS = 10_000;
 const DEFAULT_MAXKB_MAX_RETRIES = 1;
 const DEFAULT_MAXKB_RETRY_DELAY_MS = 200;
 const DEFAULT_AI_FAILURE_HANDOFF_THRESHOLD = 2;
+const DEFAULT_DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
+const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
+const DEFAULT_DEEPSEEK_TIMEOUT_MS = 10_000;
 
 export interface ChatwootConfig {
   baseUrl: string;
@@ -20,6 +23,13 @@ export interface MaxKBConfig {
   timeoutMs: number;
   maxRetries: number;
   retryDelayMs: number;
+}
+
+export interface DeepSeekConfig {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  timeoutMs: number;
 }
 
 function parsePort(value: string | undefined): number {
@@ -162,6 +172,24 @@ export function getOptionalMaxKBConfig(): MaxKBConfig | undefined {
       process.env.MAXKB_RETRY_DELAY_MS,
       DEFAULT_MAXKB_RETRY_DELAY_MS,
       'MAXKB_RETRY_DELAY_MS',
+    ),
+  };
+}
+
+export function getOptionalDeepSeekConfig(): DeepSeekConfig | undefined {
+  const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
+  if (apiKey === undefined || apiKey.length === 0) return undefined;
+
+  return {
+    baseUrl: (
+      process.env.DEEPSEEK_BASE_URL?.trim() || DEFAULT_DEEPSEEK_BASE_URL
+    ).replace(/\/$/, ''),
+    apiKey,
+    model: process.env.DEEPSEEK_MODEL?.trim() || DEFAULT_DEEPSEEK_MODEL,
+    timeoutMs: parsePositiveInteger(
+      process.env.DEEPSEEK_TIMEOUT_MS,
+      DEFAULT_DEEPSEEK_TIMEOUT_MS,
+      'DEEPSEEK_TIMEOUT_MS',
     ),
   };
 }

@@ -67,6 +67,27 @@ describe('KnowledgeAnswerService', () => {
     expect(runs.inputs[0]).toMatchObject({ answer: null, status: 'NO_ANSWER' });
   });
 
+  it('treats the explicit NO_ANSWER marker as a no-answer result', async () => {
+    const runs = new InMemoryAiRunRepository();
+    const service = new KnowledgeAnswerService(
+      new RecordingMaxKBClient({ answer: ' NO_ANSWER ', latencyMs: 5 }),
+      runs,
+      new RecordingLogger(),
+    );
+
+    await expect(
+      service.answerFor({
+        chatwootConversationId: 'conversation-marker',
+        messageId: 'message-marker',
+        question: '知识库未覆盖的问题',
+      }),
+    ).resolves.toMatchObject({ status: 'NO_ANSWER' });
+    expect(runs.inputs[0]).toMatchObject({
+      answer: null,
+      status: 'NO_ANSWER',
+    });
+  });
+
   it('does not crash or invent an answer when MaxKB fails', async () => {
     const runs = new InMemoryAiRunRepository();
     const service = new KnowledgeAnswerService(

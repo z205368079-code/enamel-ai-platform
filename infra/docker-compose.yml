@@ -52,6 +52,10 @@ services:
       MAXKB_TIMEOUT_MS: ${MAXKB_TIMEOUT_MS:-10000}
       MAXKB_MAX_RETRIES: ${MAXKB_MAX_RETRIES:-1}
       MAXKB_RETRY_DELAY_MS: ${MAXKB_RETRY_DELAY_MS:-200}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
+      DEEPSEEK_TIMEOUT_MS: ${DEEPSEEK_TIMEOUT_MS:-10000}
     depends_on:
       migrate:
         condition: service_completed_successfully

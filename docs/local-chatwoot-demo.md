@@ -11,6 +11,8 @@ docker compose -f infra/chatwoot-compose.yml run --rm web bundle exec rails db:c
 
 Open `http://localhost:3002` to create the first local administrator account. Do not reuse a production password. After creating an account, create a website inbox and an API token, then configure the Gateway's ignored `.env` with the corresponding `CHATWOOT_BASE_URL`, `CHATWOOT_ACCOUNT_ID`, and `CHATWOOT_API_TOKEN` values.
 
+For another device on the same LAN, set `CHATWOOT_FRONTEND_URL` in the ignored `infra/.env.chatwoot` to this PC's current LAN URL (for example, `http://192.168.31.74:3002`) and recreate the `web` and `worker` services. Docker exposes port `3002` on all host interfaces; Windows Firewall must allow inbound TCP 3002 on the Private profile. Use the website inbox's Chatwoot Widget URL with that host address to give customers a LAN-accessible entry. This is local-network-only; it is not an Internet deployment.
+
 For a local Docker setup, configure the Chatwoot webhook target as `http://host.docker.internal:3000/webhooks/chatwoot` so the Chatwoot container can reach the Gateway on the host.
 
 `SAFE_FETCH_ALLOW_PRIVATE_NETWORK=true` is enabled only in the local Chatwoot Compose runtime because Chatwoot otherwise blocks callbacks to private Docker/host addresses. Do not carry that setting into a production deployment; production webhook endpoints should use a controlled HTTPS address with normal network access controls.

@@ -2,9 +2,11 @@ import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 
 import { createApp } from '../src/app.js';
+import { DeepSeekClientError } from '../src/clients/deepseek-client.js';
 import { ChatwootWebhookService } from '../src/services/chatwoot-webhook-service.js';
 import { KnowledgeAnswerService } from '../src/services/knowledge-answer-service.js';
 import { HumanHandoffService } from '../src/services/human-handoff-service.js';
+import { DeepSeekFallbackService } from '../src/services/deepseek-fallback-service.js';
 import {
   InMemoryConversationRepository,
   InMemoryAiRunRepository,
@@ -12,6 +14,7 @@ import {
   RecordingChatwootClient,
   RecordingLogger,
   RecordingMaxKBClient,
+  RecordingDeepSeekClient,
 } from './test-doubles.js';
 
 function createTestContext() {
@@ -140,6 +143,152 @@ describe('POST /webhooks/chatwoot', () => {
     });
     expect(maxkbClient.inputs).toHaveLength(1);
     expect(client.inputs).toHaveLength(1);
+  });
+
+  it('uses DeepSeek only when MaxKB explicitly returns NO_ANSWER', async () => {
+    const repository = new InMemoryConversationRepository();
+    const client = new RecordingChatwootClient();
+    const logger = new RecordingLogger();
+    const aiRuns = new InMemoryAiRunRepository();
+    const maxkbClient = new RecordingMaxKBClient({
+      answer: null,
+      latencyMs: 8,
+      maxkbChatId: 'maxkb-chat-001',
+    });
+    const deepSeekClient = new RecordingDeepSeekClient();
+    const app = createApp({
+      webhookService: new ChatwootWebhookService(
+        repository,
+        new InMemoryWebhookMessageRepository(),
+        new KnowledgeAnswerService(maxkbClient, aiRuns, logger),
+        new HumanHandoffService(repository, client, logger, ['赔偿'], 2),
+        client,
+        logger,
+        undefined,
+        new DeepSeekFallbackService(deepSeekClient, aiRuns, logger),
+      ),
+      handoffService: new HumanHandoffService(
+        repository,
+        client,
+        logger,
+        ['赔偿'],
+        2,
+      ),
+      logger,
+    });
+
+    const response = await request(app)
+      .post('/webhooks/chatwoot')
+      .send(customerTextMessage());
+
+    expect(response.status).toBe(200);
+    expect(deepSeekClient.inputs).toEqual([{ question: '锅具可以进烤箱吗？' }]);
+    expect(client.inputs).toEqual([
+      { conversationId: '202', content: '来自 DeepSeek 的通用建议。' },
+    ]);
+    expect(repository.handoffs).toEqual([]);
+    expect(aiRuns.inputs.map((input) => input.status)).toEqual([
+      'NO_ANSWER',
+      'SUCCESS',
+    ]);
+  });
+
+  it('skips DeepSeek for high-risk messages', async () => {
+    const repository = new InMemoryConversationRepository();
+    const client = new RecordingChatwootClient();
+    const logger = new RecordingLogger();
+    const aiRuns = new InMemoryAiRunRepository();
+    const maxkbClient = new RecordingMaxKBClient({
+      answer: null,
+      latencyMs: 8,
+    });
+    const deepSeekClient = new RecordingDeepSeekClient();
+    const app = createApp({
+      webhookService: new ChatwootWebhookService(
+        repository,
+        new InMemoryWebhookMessageRepository(),
+        new KnowledgeAnswerService(maxkbClient, aiRuns, logger),
+        new HumanHandoffService(repository, client, logger, ['赔偿'], 2),
+        client,
+        logger,
+        undefined,
+        new DeepSeekFallbackService(deepSeekClient, aiRuns, logger),
+      ),
+      handoffService: new HumanHandoffService(
+        repository,
+        client,
+        logger,
+        ['赔偿'],
+        2,
+      ),
+      logger,
+    });
+
+    const response = await request(app)
+      .post('/webhooks/chatwoot')
+      .send(customerTextMessage({ id: 103, content: '锅掉瓷伤人要赔偿吗？' }));
+
+    expect(response.status).toBe(200);
+    expect(maxkbClient.inputs).toEqual([]);
+    expect(deepSeekClient.inputs).toEqual([]);
+    expect(repository.handoffs).toEqual([
+      { conversationId: '202', reason: 'HIGH_RISK' },
+    ]);
+  });
+
+  it('hands off when an explicit no-answer cannot be completed by DeepSeek', async () => {
+    const repository = new InMemoryConversationRepository();
+    const client = new RecordingChatwootClient();
+    const logger = new RecordingLogger();
+    const aiRuns = new InMemoryAiRunRepository();
+    const maxkbClient = new RecordingMaxKBClient({
+      answer: null,
+      latencyMs: 8,
+    });
+    const app = createApp({
+      webhookService: new ChatwootWebhookService(
+        repository,
+        new InMemoryWebhookMessageRepository(),
+        new KnowledgeAnswerService(maxkbClient, aiRuns, logger),
+        new HumanHandoffService(repository, client, logger, ['赔偿'], 2),
+        client,
+        logger,
+        undefined,
+        new DeepSeekFallbackService(
+          {
+            answer: async () => {
+              throw new DeepSeekClientError('TIMEOUT', 'timed out');
+            },
+          },
+          aiRuns,
+          logger,
+        ),
+      ),
+      handoffService: new HumanHandoffService(
+        repository,
+        client,
+        logger,
+        ['赔偿'],
+        2,
+      ),
+      logger,
+    });
+
+    const response = await request(app)
+      .post('/webhooks/chatwoot')
+      .send(customerTextMessage());
+
+    expect(response.status).toBe(200);
+    expect(repository.handoffs).toEqual([
+      { conversationId: '202', reason: 'NO_ANSWER' },
+    ]);
+    expect(client.inputs).toEqual([
+      {
+        conversationId: '202',
+        content: '这个问题暂时无法从知识库中确认，我已为您转接人工客服。',
+      },
+    ]);
+    expect(JSON.stringify(logger.errorEntries)).not.toContain('timed out');
   });
 
   it('claims concurrent duplicate deliveries only once', async () => {

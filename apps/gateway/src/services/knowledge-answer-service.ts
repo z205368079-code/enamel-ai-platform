@@ -19,7 +19,7 @@ export interface KnowledgeAnswerInput {
 export interface KnowledgeAnswerResult {
   status: KnowledgeAnswerStatus;
   answer: string;
-  provider: 'maxkb';
+  provider: 'maxkb' | 'deepseek';
   latencyMs: number | null;
   errorCode: string | null;
   maxkbChatId?: string | undefined;
@@ -47,7 +47,10 @@ export class KnowledgeAnswerService {
       };
       const result = await this.maxkbClient.answer(request);
       latencyMs = result.latencyMs;
-      if (result.answer === null) {
+      if (
+        result.answer === null ||
+        result.answer.trim().toUpperCase() === KNOWLEDGE_ANSWER_STATUS.NO_ANSWER
+      ) {
         status = KNOWLEDGE_ANSWER_STATUS.NO_ANSWER;
         errorCode = KNOWLEDGE_ANSWER_STATUS.NO_ANSWER;
       } else {
