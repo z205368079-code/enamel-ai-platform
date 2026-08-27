@@ -7,6 +7,7 @@ import type { ConversationRepository } from '../repositories/conversation-reposi
 import type { WebhookMessageRepository } from '../repositories/webhook-message-repository.js';
 import type { KnowledgeAnswerService } from './knowledge-answer-service.js';
 import { HumanHandoffService } from './human-handoff-service.js';
+import type { AnalyticsService } from './analytics-service.js';
 
 export interface WebhookProcessingResult {
   status: 'processed' | 'ignored';
@@ -123,6 +124,7 @@ export class ChatwootWebhookService {
     private readonly handoffService: HumanHandoffService,
     private readonly chatwootClient: ChatwootClient,
     private readonly logger: Logger,
+    private readonly analyticsService?: AnalyticsService,
   ) {}
 
   async process(payload: unknown): Promise<WebhookProcessingResult> {
@@ -203,6 +205,11 @@ export class ChatwootWebhookService {
         knowledgeAnswer,
       );
       if (afterAiDecision !== 'CONTINUE_AI') {
+        if (afterAiDecision === 'HANDOFF_NO_ANSWER')
+          await this.analyticsService?.recordNoAnswer(
+            parsed.conversationId,
+            parsed.messageId,
+          );
         const transitioned = await this.handoffService.handoff(
           parsed.conversationId,
           afterAiDecision,
