@@ -33,6 +33,11 @@ import {
 import { ChatwootWebhookService } from './services/chatwoot-webhook-service.js';
 import { KnowledgeAnswerService } from './services/knowledge-answer-service.js';
 import { HumanHandoffService } from './services/human-handoff-service.js';
+import { AnalyticsService } from './services/analytics-service.js';
+import {
+  NoopAnalyticsRepository,
+  PostgresAnalyticsRepository,
+} from './repositories/analytics-repository.js';
 
 const port = getGatewayPort();
 const logger = new ConsoleLogger();
@@ -64,6 +69,11 @@ const handoffService = new HumanHandoffService(
   handoffConfig.highRiskKeywords,
   handoffConfig.failureThreshold,
 );
+const analyticsService = new AnalyticsService(
+  databaseUrl
+    ? new PostgresAnalyticsRepository(databaseUrl)
+    : new NoopAnalyticsRepository(),
+);
 const webhookService = new ChatwootWebhookService(
   conversationRepository,
   webhookMessageRepository,
@@ -71,10 +81,12 @@ const webhookService = new ChatwootWebhookService(
   handoffService,
   chatwootClient,
   logger,
+  analyticsService,
 );
 const app = createApp({
   webhookService,
   handoffService,
+  analyticsService,
   internalApiToken: getOptionalInternalApiToken(),
   logger,
 });

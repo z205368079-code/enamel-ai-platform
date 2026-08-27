@@ -6,6 +6,7 @@ import { createInternalAuthMiddleware } from './middleware/internal-auth-middlew
 import type { Logger } from './logging/logger.js';
 import type { ChatwootWebhookService } from './services/chatwoot-webhook-service.js';
 import type { HumanHandoffService } from './services/human-handoff-service.js';
+import type { AnalyticsService } from './services/analytics-service.js';
 
 export interface HealthResponse {
   status: 'ok';
@@ -18,6 +19,7 @@ export interface AppDependencies {
   logger: Logger;
   handoffService: HumanHandoffService;
   internalApiToken?: string | undefined;
+  analyticsService?: AnalyticsService;
 }
 
 export function createApp(dependencies: AppDependencies): Express {
@@ -51,6 +53,20 @@ export function createApp(dependencies: AppDependencies): Express {
       dependencies.logger,
     ),
   );
+  app.get('/internal/stats', async (_request, response) =>
+    response
+      .status(200)
+      .json((await dependencies.analyticsService?.stats()) ?? {}),
+  );
+  app.get('/internal/knowledge-gaps', async (request, response) => {
+    const limit = Math.min(Number(request.query.limit) || 20, 100);
+    const offset = Math.max(Number(request.query.offset) || 0, 0);
+    response.status(200).json({
+      items: (await dependencies.analyticsService?.gaps(limit, offset)) ?? [],
+      limit,
+      offset,
+    });
+  });
   app.post(
     '/internal/conversations/:id/resume-ai',
     createInternalConversationController(dependencies.handoffService),
