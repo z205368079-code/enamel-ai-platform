@@ -2,6 +2,7 @@ import express, { type Express, type Request, type Response } from 'express';
 
 import { createChatwootWebhookController } from './api/chatwoot-webhook-controller.js';
 import { createInternalConversationController } from './api/internal-conversation-controller.js';
+import { createInternalAuthMiddleware } from './middleware/internal-auth-middleware.js';
 import type { Logger } from './logging/logger.js';
 import type { ChatwootWebhookService } from './services/chatwoot-webhook-service.js';
 import type { HumanHandoffService } from './services/human-handoff-service.js';
@@ -16,6 +17,7 @@ export interface AppDependencies {
   webhookService: ChatwootWebhookService;
   logger: Logger;
   handoffService: HumanHandoffService;
+  internalApiToken?: string | undefined;
 }
 
 export function createApp(dependencies: AppDependencies): Express {
@@ -35,6 +37,13 @@ export function createApp(dependencies: AppDependencies): Express {
     },
   );
 
+  app.use(
+    '/internal',
+    createInternalAuthMiddleware(
+      dependencies.internalApiToken,
+      dependencies.logger,
+    ),
+  );
   app.post(
     '/webhooks/chatwoot',
     createChatwootWebhookController(
