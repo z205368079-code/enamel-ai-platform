@@ -1,0 +1,29 @@
+export const HANDOFF_REASON = {
+  USER_REQUEST: 'USER_REQUEST',
+  NO_ANSWER: 'NO_ANSWER',
+  AI_FAILURE: 'AI_FAILURE',
+  HIGH_RISK: 'HIGH_RISK',
+} as const;
+
+export type HandoffReason =
+  (typeof HANDOFF_REASON)[keyof typeof HANDOFF_REASON];
+
+export const HANDOFF_TRIGGERED_BY = {
+  CUSTOMER: 'CUSTOMER',
+  SYSTEM: 'SYSTEM',
+} as const;
+
+export type HandoffTriggeredBy =
+  (typeof HANDOFF_TRIGGERED_BY)[keyof typeof HANDOFF_TRIGGERED_BY];
+
+export const ROUTING_DECISION = {
+  CONTINUE_AI: 'CONTINUE_AI',
+  HANDOFF_USER_REQUEST: 'HANDOFF_USER_REQUEST',
+  HANDOFF_NO_ANSWER: 'HANDOFF_NO_ANSWER',
+  HANDOFF_AI_FAILURE: 'HANDOFF_AI_FAILURE',
+  HANDOFF_HIGH_RISK: 'HANDOFF_HIGH_RISK',
+  ALREADY_HUMAN: 'ALREADY_HUMAN',
+} as const;
+
+export type RoutingDecision =
+  (typeof ROUTING_DECISION)[keyof typeof ROUTING_DECISION];

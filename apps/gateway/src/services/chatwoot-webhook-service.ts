@@ -6,6 +6,7 @@ import type { Logger } from '../logging/logger.js';
 import type { ConversationRepository } from '../repositories/conversation-repository.js';
 import type { WebhookMessageRepository } from '../repositories/webhook-message-repository.js';
 import type { KnowledgeAnswerService } from './knowledge-answer-service.js';
+import { HumanHandoffService } from './human-handoff-service.js';
 
 export interface WebhookProcessingResult {
   status: 'processed' | 'ignored';
@@ -119,6 +120,7 @@ export class ChatwootWebhookService {
     private readonly conversationRepository: ConversationRepository,
     private readonly webhookMessageRepository: WebhookMessageRepository,
     private readonly knowledgeAnswerService: KnowledgeAnswerService,
+    private readonly handoffService: HumanHandoffService,
     private readonly chatwootClient: ChatwootClient,
     private readonly logger: Logger,
   ) {}
@@ -160,6 +162,28 @@ export class ChatwootWebhookService {
         mode: CONVERSATION_MODE.AI,
       });
 
+      const state = await this.conversationRepository.getState(
+        parsed.conversationId,
+      );
+      const initialDecision = this.handoffService.routeBeforeAi(
+        state,
+        parsed.content,
+      );
+      if (initialDecision === 'ALREADY_HUMAN')
+        return { status: 'ignored', reason: 'already_human' };
+      if (initialDecision !== 'CONTINUE_AI') {
+        const transitioned = await this.handoffService.handoff(
+          parsed.conversationId,
+          initialDecision,
+        );
+        if (transitioned)
+          await this.chatwootClient.sendConversationMessage({
+            conversationId: parsed.conversationId,
+            content: '这个问题暂时无法从知识库中确认，我已为您转接人工客服。',
+          });
+        return { status: 'processed' };
+      }
+
       const knowledgeAnswer =
         await this.conversationRepository.withMaxKBSession(
           parsed.conversationId,
@@ -174,6 +198,22 @@ export class ChatwootWebhookService {
           },
         );
 
+      const afterAiDecision = await this.handoffService.routeAfterAi(
+        parsed.conversationId,
+        knowledgeAnswer,
+      );
+      if (afterAiDecision !== 'CONTINUE_AI') {
+        const transitioned = await this.handoffService.handoff(
+          parsed.conversationId,
+          afterAiDecision,
+        );
+        if (transitioned)
+          await this.chatwootClient.sendConversationMessage({
+            conversationId: parsed.conversationId,
+            content: '这个问题暂时无法从知识库中确认，我已为您转接人工客服。',
+          });
+        return { status: 'processed' };
+      }
       const result = await this.chatwootClient.sendConversationMessage({
         conversationId: parsed.conversationId,
         content: knowledgeAnswer.answer,

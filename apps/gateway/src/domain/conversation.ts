@@ -1,5 +1,6 @@
 export const CONVERSATION_MODE = {
   AI: 'AI',
+  HUMAN: 'HUMAN',
 } as const;
 
 export type ConversationMode =
@@ -9,4 +10,9 @@ export interface ConversationUpsertInput {
   chatwootConversationId: string;
   contactId: string;
   mode: ConversationMode;
+}
+
+export interface ConversationState {
+  mode: ConversationMode;
+  consecutiveAiFailures: number;
 }

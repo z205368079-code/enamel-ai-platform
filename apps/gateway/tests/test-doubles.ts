@@ -2,6 +2,14 @@ import type { ChatwootClient } from '../src/clients/chatwoot-client.js';
 import type { MaxKBAnswer, MaxKBClient } from '../src/clients/maxkb-client.js';
 import type { AiRunInput } from '../src/domain/ai-run.js';
 import type { ConversationUpsertInput } from '../src/domain/conversation.js';
+import {
+  CONVERSATION_MODE,
+  type ConversationState,
+} from '../src/domain/conversation.js';
+import type {
+  HandoffReason,
+  HandoffTriggeredBy,
+} from '../src/domain/handoff.js';
 import type { Logger } from '../src/logging/logger.js';
 import type { ConversationRepository } from '../src/repositories/conversation-repository.js';
 import type { AiRunRepository } from '../src/repositories/ai-run-repository.js';
@@ -10,9 +18,63 @@ import type { WebhookMessageRepository } from '../src/repositories/webhook-messa
 export class InMemoryConversationRepository implements ConversationRepository {
   readonly inputs: ConversationUpsertInput[] = [];
   readonly maxkbChatIds = new Map<string, string>();
+  readonly states = new Map<string, ConversationState>();
+  readonly handoffs: Array<{ conversationId: string; reason: HandoffReason }> =
+    [];
 
   async upsert(input: ConversationUpsertInput): Promise<void> {
     this.inputs.push(input);
+    if (!this.states.has(input.chatwootConversationId))
+      this.states.set(input.chatwootConversationId, {
+        mode: CONVERSATION_MODE.AI,
+        consecutiveAiFailures: 0,
+      });
+  }
+
+  async getState(conversationId: string): Promise<ConversationState> {
+    return (
+      this.states.get(conversationId) ?? {
+        mode: CONVERSATION_MODE.AI,
+        consecutiveAiFailures: 0,
+      }
+    );
+  }
+  async handoff(
+    conversationId: string,
+    reason: HandoffReason,
+    _triggeredBy: HandoffTriggeredBy,
+  ): Promise<boolean> {
+    void _triggeredBy;
+    const state = await this.getState(conversationId);
+    if (state.mode === CONVERSATION_MODE.HUMAN) return false;
+    this.states.set(conversationId, {
+      ...state,
+      mode: CONVERSATION_MODE.HUMAN,
+    });
+    this.handoffs.push({ conversationId, reason });
+    return true;
+  }
+  async recordAiOutcome(
+    conversationId: string,
+    succeeded: boolean,
+    threshold: number,
+  ): Promise<{ failureCount: number; handoff: boolean }> {
+    const state = await this.getState(conversationId);
+    const failureCount = succeeded ? 0 : state.consecutiveAiFailures + 1;
+    this.states.set(conversationId, {
+      ...state,
+      consecutiveAiFailures: failureCount,
+    });
+    return { failureCount, handoff: !succeeded && failureCount >= threshold };
+  }
+  async resumeAi(conversationId: string): Promise<boolean> {
+    const state = await this.getState(conversationId);
+    if (state.mode !== CONVERSATION_MODE.HUMAN) return false;
+    this.states.set(conversationId, {
+      mode: CONVERSATION_MODE.AI,
+      consecutiveAiFailures: 0,
+    });
+    return true;
   }
 
   async getMaxKBChatId(
@@ -107,6 +169,10 @@ export class RecordingChatwootClient implements ChatwootClient {
   }): Promise<{ latencyMs: number }> {
     this.inputs.push(input);
     return { latencyMs: 12 };
+  }
+  readonly markedConversations: string[] = [];
+  async markConversationForHumanHandoff(conversationId: string): Promise<void> {
+    this.markedConversations.push(conversationId);
   }
 }
 

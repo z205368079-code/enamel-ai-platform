@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { createApp } from './app.js';
 import {
   getGatewayPort,
+  getHandoffConfig,
   getOptionalChatwootConfig,
   getOptionalDatabaseUrl,
   getOptionalMaxKBConfig,
@@ -30,12 +31,14 @@ import {
 } from './repositories/webhook-message-repository.js';
 import { ChatwootWebhookService } from './services/chatwoot-webhook-service.js';
 import { KnowledgeAnswerService } from './services/knowledge-answer-service.js';
+import { HumanHandoffService } from './services/human-handoff-service.js';
 
 const port = getGatewayPort();
 const logger = new ConsoleLogger();
 const databaseUrl = getOptionalDatabaseUrl();
 const chatwootConfig = getOptionalChatwootConfig();
 const maxkbConfig = getOptionalMaxKBConfig();
+const handoffConfig = getHandoffConfig();
 const conversationRepository = databaseUrl
   ? new PostgresConversationRepository(databaseUrl)
   : new UnavailableConversationRepository();
@@ -53,14 +56,22 @@ const knowledgeAnswerService = new KnowledgeAnswerService(
   aiRunRepository,
   logger,
 );
+const handoffService = new HumanHandoffService(
+  conversationRepository,
+  chatwootClient,
+  logger,
+  handoffConfig.highRiskKeywords,
+  handoffConfig.failureThreshold,
+);
 const webhookService = new ChatwootWebhookService(
   conversationRepository,
   webhookMessageRepository,
   knowledgeAnswerService,
+  handoffService,
   chatwootClient,
   logger,
 );
-const app = createApp({ webhookService, logger });
+const app = createApp({ webhookService, handoffService, logger });
 
 app.listen(port, '0.0.0.0', () => {
   console.log(`Enamel AI Gateway listening on port ${port}.`);

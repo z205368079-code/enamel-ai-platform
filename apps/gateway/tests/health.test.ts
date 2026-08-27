@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { ChatwootWebhookService } from '../src/services/chatwoot-webhook-service.js';
 import { KnowledgeAnswerService } from '../src/services/knowledge-answer-service.js';
+import { HumanHandoffService } from '../src/services/human-handoff-service.js';
 import {
   InMemoryConversationRepository,
   InMemoryAiRunRepository,
@@ -16,18 +17,28 @@ import {
 describe('GET /health', () => {
   it('returns the gateway liveness status', async () => {
     const logger = new RecordingLogger();
+    const repository = new InMemoryConversationRepository();
+    const client = new RecordingChatwootClient();
     const response = await request(
       createApp({
         webhookService: new ChatwootWebhookService(
-          new InMemoryConversationRepository(),
+          repository,
           new InMemoryWebhookMessageRepository(),
           new KnowledgeAnswerService(
             new RecordingMaxKBClient(),
             new InMemoryAiRunRepository(),
             logger,
           ),
-          new RecordingChatwootClient(),
+          new HumanHandoffService(repository, client, logger, [], 2),
+          client,
           logger,
+        ),
+        handoffService: new HumanHandoffService(
+          repository,
+          client,
+          logger,
+          [],
+          2,
         ),
         logger,
       }),

@@ -2,7 +2,7 @@
 
 用于珐琅锅企业 AI 应用与客服知识库技术面试展示的集成型 PoC（概念验证）。项目重点是清晰展示开源选型、系统集成、API 边界、Docker 部署和后续 AI/人工协作设计，而不是开发完整商业 SaaS。
 
-## Phase 2 当前能力
+## Phase 3 当前能力
 
 - Node.js + TypeScript AI Gateway
 - `GET /health` 存活检查
@@ -10,11 +10,12 @@
 - Chatwoot 客户文本消息筛选、Conversation 持久化与 MaxKB 知识库回复
 - 独立 Chatwoot API Client（timeout、错误分类与延迟记录）
 - 独立 MaxKB Application API Client（timeout、有限重试、错误分类与延迟记录）
+- AI / HUMAN 会话状态、人工接管事件、失败阈值与内部恢复 AI 接口
 - PostgreSQL 15 基础服务与 `conversations`、`ai_runs` 表初始化
 - Docker Compose 本地编排
 - ESLint、Prettier、TypeScript strict、Vitest
 
-以下能力尚未实现：Human Handoff、统计接口和 Dashboard。Gateway 不直接调用 LLM；知识库回答只来自 MaxKB。
+以下能力尚未实现：统计接口和 Dashboard。Gateway 不直接调用 LLM；知识库回答只来自 MaxKB。
 
 ## 架构边界
 
@@ -102,6 +103,10 @@ MaxKB 成功返回的 `choices[0].chat_id` 才会写入本地 `conversations.max
 同一 `message_id` 由数据库唯一键认领：重复或并发重复 webhook 返回安全 2xx，不会再次调用 MaxKB 或回帖。针对同一 Chatwoot conversation，Gateway 使用 PostgreSQL 事务级 advisory lock 串行化 MaxKB session 初始化，避免竞争创建多个会话。
 
 MaxKB 无可用答案或上游异常时，Gateway 不调用 LLM 兜底，而是回帖受控文案：`暂时无法从知识库中找到可靠答案，请稍后重试或联系人工客服。`
+
+### Human Handoff
+
+会话处于 `HUMAN` 后不再调用 MaxKB 或发送自动 AI 回复。客户明确请求人工、Demo 高风险关键词、`NO_ANSWER` 或连续失败达到阈值会触发接管。`POST /internal/conversations/:id/resume-ai` 仅供 Demo/internal use；完整规则见 [`docs/human-handoff.md`](docs/human-handoff.md)。
 
 日志只保留事件类型、会话/消息标识、处理状态与延迟；不记录完整 payload、问题、回答、Authorization、API Key 或数据库密码。数据库中保留 question/answer 仅用于 PoC 面试审计。生产环境还应增加数据保留期限、访问控制、脱敏与删除策略。
 
