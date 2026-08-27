@@ -39,6 +39,7 @@ services:
       POSTGRES_USERNAME: chatwoot
       REDIS_URL: redis://redis:6379
       FRONTEND_URL: http://localhost:3002
+      SAFE_FETCH_ALLOW_PRIVATE_NETWORK: 'true'
     command: bundle exec rails s -p 3000 -b 0.0.0.0
     depends_on:
       postgres:
@@ -63,6 +64,7 @@ services:
       POSTGRES_USERNAME: chatwoot
       REDIS_URL: redis://redis:6379
       FRONTEND_URL: http://localhost:3002
+      SAFE_FETCH_ALLOW_PRIVATE_NETWORK: 'true'
     command: bundle exec sidekiq -C config/sidekiq.yml
     depends_on:
       postgres:

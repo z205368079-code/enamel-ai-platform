@@ -21,6 +21,13 @@ export function createChatwootWebhookController(
       }
 
       if (error instanceof ConfigurationError) {
+        logger.error(
+          {
+            processingResult: 'unavailable',
+            error: error.name,
+          },
+          'Chatwoot webhook configuration is unavailable.',
+        );
         response.status(503).json({ status: 'unavailable' });
         return;
       }
