@@ -6,4 +6,4 @@
 
 接管先在 PostgreSQL 原子写入 `HUMAN` 与唯一 `handoff_events`，再 best-effort 调用 Chatwoot 标签 API：先读取现有 labels，再追加 `human_handoff`，避免覆盖已有标签。标签 API 失败不会回滚本地状态。
 
-`POST /internal/conversations/:id/resume-ai` 仅用于 Demo/internal use：恢复 AI、清零连续失败计数、不删除历史 handoff event。生产环境应加入认证、客服分配/队列、审计权限、数据保留与脱敏策略。
+`POST /internal/conversations/:id/resume-ai` 仅用于 Demo/internal use：恢复 AI、清零连续失败计数、不删除历史 handoff event。它必须提供 `Authorization: Bearer <INTERNAL_API_TOKEN>`，未配置或认证错误一律返回 401。生产环境应再使用私有网络、反向代理访问控制、SSO/IAM 与 RBAC。

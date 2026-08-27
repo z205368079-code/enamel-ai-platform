@@ -185,3 +185,8 @@ export function getHandoffConfig(): {
       .filter(Boolean),
   };
 }
+
+export function getOptionalInternalApiToken(): string | undefined {
+  const token = process.env.INTERNAL_API_TOKEN?.trim();
+  return token === undefined || token.length === 0 ? undefined : token;
+}

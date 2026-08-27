@@ -4,6 +4,7 @@ import { createApp } from './app.js';
 import {
   getGatewayPort,
   getHandoffConfig,
+  getOptionalInternalApiToken,
   getOptionalChatwootConfig,
   getOptionalDatabaseUrl,
   getOptionalMaxKBConfig,
@@ -71,7 +72,12 @@ const webhookService = new ChatwootWebhookService(
   chatwootClient,
   logger,
 );
-const app = createApp({ webhookService, handoffService, logger });
+const app = createApp({
+  webhookService,
+  handoffService,
+  internalApiToken: getOptionalInternalApiToken(),
+  logger,
+});
 
 app.listen(port, '0.0.0.0', () => {
   console.log(`Enamel AI Gateway listening on port ${port}.`);
