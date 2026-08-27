@@ -1,0 +1,75 @@
+name: enamel-ai-chatwoot
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.6-pg15
+    restart: unless-stopped
+    env_file:
+      - .env.chatwoot
+    environment:
+      POSTGRES_DB: chatwoot
+      POSTGRES_USER: chatwoot
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U chatwoot -d chatwoot']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - chatwoot_postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - chatwoot_redis_data:/data
+
+  web:
+    image: chatwoot/chatwoot:v4.17.1
+    restart: unless-stopped
+    env_file:
+      - .env.chatwoot
+    environment:
+      RAILS_ENV: production
+      NODE_ENV: production
+      INSTALLATION_ENV: docker
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DATABASE: chatwoot
+      POSTGRES_USERNAME: chatwoot
+      REDIS_URL: redis://redis:6379
+      FRONTEND_URL: http://localhost:3002
+    command: bundle exec rails s -p 3000 -b 0.0.0.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - '3002:3000'
+
+  worker:
+    image: chatwoot/chatwoot:v4.17.1
+    restart: unless-stopped
+    env_file:
+      - .env.chatwoot
+    environment:
+      RAILS_ENV: production
+      NODE_ENV: production
+      INSTALLATION_ENV: docker
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DATABASE: chatwoot
+      POSTGRES_USERNAME: chatwoot
+      REDIS_URL: redis://redis:6379
+      FRONTEND_URL: http://localhost:3002
+    command: bundle exec sidekiq -C config/sidekiq.yml
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+volumes:
+  chatwoot_postgres_data:
+  chatwoot_redis_data:
