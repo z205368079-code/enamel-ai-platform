@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { ChatwootWebhookService } from '../src/services/chatwoot-webhook-service.js';
 import { KnowledgeAnswerService } from '../src/services/knowledge-answer-service.js';
+import { HumanHandoffService } from '../src/services/human-handoff-service.js';
 import {
   InMemoryConversationRepository,
   InMemoryAiRunRepository,
@@ -25,8 +26,16 @@ function createTestContext() {
       repository,
       webhookMessages,
       new KnowledgeAnswerService(maxkbClient, aiRunRepository, logger),
+      new HumanHandoffService(repository, client, logger, ['赔偿', '投诉'], 2),
       client,
       logger,
+    ),
+    handoffService: new HumanHandoffService(
+      repository,
+      client,
+      logger,
+      ['赔偿'],
+      2,
     ),
     logger,
   });
@@ -175,8 +184,16 @@ describe('POST /webhooks/chatwoot', () => {
           new InMemoryAiRunRepository(),
           logger,
         ),
+        new HumanHandoffService(repository, client, logger, ['赔偿'], 2),
         client,
         logger,
+      ),
+      handoffService: new HumanHandoffService(
+        repository,
+        client,
+        logger,
+        ['赔偿'],
+        2,
       ),
       logger,
     });

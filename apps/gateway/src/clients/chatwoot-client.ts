@@ -7,6 +7,7 @@ export interface ChatwootClient {
   sendConversationMessage(
     input: SendConversationMessageInput,
   ): Promise<ChatwootSendResult>;
+  markConversationForHumanHandoff(conversationId: string): Promise<void>;
 }
 
 export interface ChatwootClientConfig {
@@ -90,10 +91,46 @@ export class HttpChatwootClient implements ChatwootClient {
       clearTimeout(timeout);
     }
   }
+
+  async markConversationForHumanHandoff(conversationId: string): Promise<void> {
+    const base = `${this.config.baseUrl}/api/v1/accounts/${encodeURIComponent(this.config.accountId)}/conversations/${encodeURIComponent(conversationId)}`;
+    const headers = {
+      'Content-Type': 'application/json',
+      api_access_token: this.config.apiToken,
+    };
+    const labelsResponse = await this.fetchFn(`${base}/labels`, { headers });
+    if (!labelsResponse.ok)
+      throw new ChatwootClientError(
+        'CHATWOOT_HTTP_ERROR',
+        'Chatwoot labels API failed.',
+      );
+    const payload: unknown = await labelsResponse.json();
+    const labels = Array.isArray(payload)
+      ? payload.filter((value): value is string => typeof value === 'string')
+      : [];
+    const response = await this.fetchFn(`${base}/labels`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        labels: [...new Set([...labels, 'human_handoff'])],
+      }),
+    });
+    if (!response.ok)
+      throw new ChatwootClientError(
+        'CHATWOOT_HTTP_ERROR',
+        'Chatwoot handoff label API failed.',
+      );
+  }
 }
 
 export class UnavailableChatwootClient implements ChatwootClient {
   async sendConversationMessage(): Promise<ChatwootSendResult> {
+    throw new ChatwootClientError(
+      'CHATWOOT_NETWORK_ERROR',
+      'Chatwoot integration is not configured.',
+    );
+  }
+  async markConversationForHumanHandoff(): Promise<void> {
     throw new ChatwootClientError(
       'CHATWOOT_NETWORK_ERROR',
       'Chatwoot integration is not configured.',

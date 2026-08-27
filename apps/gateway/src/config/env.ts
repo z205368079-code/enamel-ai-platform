@@ -3,6 +3,7 @@ const DEFAULT_CHATWOOT_TIMEOUT_MS = 5_000;
 const DEFAULT_MAXKB_TIMEOUT_MS = 10_000;
 const DEFAULT_MAXKB_MAX_RETRIES = 1;
 const DEFAULT_MAXKB_RETRY_DELAY_MS = 200;
+const DEFAULT_AI_FAILURE_HANDOFF_THRESHOLD = 2;
 
 export interface ChatwootConfig {
   baseUrl: string;
@@ -162,5 +163,25 @@ export function getOptionalMaxKBConfig(): MaxKBConfig | undefined {
       DEFAULT_MAXKB_RETRY_DELAY_MS,
       'MAXKB_RETRY_DELAY_MS',
     ),
+  };
+}
+
+export function getHandoffConfig(): {
+  failureThreshold: number;
+  highRiskKeywords: string[];
+} {
+  return {
+    failureThreshold: parsePositiveInteger(
+      process.env.AI_FAILURE_HANDOFF_THRESHOLD,
+      DEFAULT_AI_FAILURE_HANDOFF_THRESHOLD,
+      'AI_FAILURE_HANDOFF_THRESHOLD',
+    ),
+    highRiskKeywords: (
+      process.env.HIGH_RISK_KEYWORDS ??
+      '赔偿,投诉,法律,起诉,人身伤害,严重质量问题'
+    )
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean),
   };
 }

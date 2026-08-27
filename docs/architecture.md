@@ -1,4 +1,4 @@
-# Architecture — Phase 2
+# Architecture — Phase 3
 
 ## 1. 目标与范围
 
@@ -23,6 +23,8 @@ flowchart LR
 ```
 
 Phase 2 已实现 Chatwoot → Gateway → MaxKB → Gateway → Chatwoot；人工客服仍是后续阶段边界。
+
+Phase 3 在 Gateway 内新增受控 AI/HUMAN 状态机：HUMAN 模式绕过 MaxKB，Chatwoot 使用保留原标签后追加 `human_handoff` 的官方标签 API 作 best-effort 标记。详见 [`human-handoff.md`](human-handoff.md)。
 
 ## 3. Gateway 结构
 
