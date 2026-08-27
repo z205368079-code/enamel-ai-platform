@@ -4,6 +4,8 @@ import type { IncomingChatwootMessage } from '../domain/chatwoot.js';
 import { WebhookValidationError } from '../errors.js';
 import type { Logger } from '../logging/logger.js';
 import type { ConversationRepository } from '../repositories/conversation-repository.js';
+import type { WebhookMessageRepository } from '../repositories/webhook-message-repository.js';
+import type { KnowledgeAnswerService } from './knowledge-answer-service.js';
 
 export interface WebhookProcessingResult {
   status: 'processed' | 'ignored';
@@ -115,6 +117,8 @@ export function parseIncomingChatwootMessage(
 export class ChatwootWebhookService {
   constructor(
     private readonly conversationRepository: ConversationRepository,
+    private readonly webhookMessageRepository: WebhookMessageRepository,
+    private readonly knowledgeAnswerService: KnowledgeAnswerService,
     private readonly chatwootClient: ChatwootClient,
     private readonly logger: Logger,
   ) {}
@@ -132,29 +136,67 @@ export class ChatwootWebhookService {
       return parsed;
     }
 
-    await this.conversationRepository.upsert({
-      chatwootConversationId: parsed.conversationId,
-      contactId: parsed.contactId,
-      mode: CONVERSATION_MODE.AI,
-    });
-
-    const reply = `[Demo AI] 已收到您的问题：${parsed.content}`;
-    const result = await this.chatwootClient.sendConversationMessage({
-      conversationId: parsed.conversationId,
-      content: reply,
-    });
-
-    this.logger.info(
-      {
-        eventType: parsed.eventType,
-        conversationId: parsed.conversationId,
-        messageId: parsed.messageId,
-        processingResult: 'processed',
-        chatwootLatencyMs: result.latencyMs,
-      },
-      'Chatwoot webhook processed.',
+    const claimed = await this.webhookMessageRepository.claim(
+      parsed.messageId,
+      parsed.conversationId,
     );
+    if (!claimed) {
+      this.logger.info(
+        {
+          eventType: parsed.eventType,
+          conversationId: parsed.conversationId,
+          messageId: parsed.messageId,
+          processingResult: 'duplicate_message',
+        },
+        'Chatwoot webhook duplicate ignored.',
+      );
+      return { status: 'ignored', reason: 'duplicate_message' };
+    }
 
-    return { status: 'processed' };
+    try {
+      await this.conversationRepository.upsert({
+        chatwootConversationId: parsed.conversationId,
+        contactId: parsed.contactId,
+        mode: CONVERSATION_MODE.AI,
+      });
+
+      const knowledgeAnswer =
+        await this.conversationRepository.withMaxKBSession(
+          parsed.conversationId,
+          async (maxkbChatId) => {
+            const answer = await this.knowledgeAnswerService.answerFor({
+              chatwootConversationId: parsed.conversationId,
+              messageId: parsed.messageId,
+              question: parsed.content,
+              maxkbChatId,
+            });
+            return { value: answer, nextMaxKBChatId: answer.maxkbChatId };
+          },
+        );
+
+      const result = await this.chatwootClient.sendConversationMessage({
+        conversationId: parsed.conversationId,
+        content: knowledgeAnswer.answer,
+      });
+
+      this.logger.info(
+        {
+          eventType: parsed.eventType,
+          conversationId: parsed.conversationId,
+          messageId: parsed.messageId,
+          processingResult: 'processed',
+          knowledgeStatus: knowledgeAnswer.status,
+          maxkbLatencyMs: knowledgeAnswer.latencyMs,
+          maxkbErrorCode: knowledgeAnswer.errorCode,
+          chatwootLatencyMs: result.latencyMs,
+        },
+        'Chatwoot webhook processed.',
+      );
+
+      return { status: 'processed' };
+    } catch (error: unknown) {
+      await this.webhookMessageRepository.release(parsed.messageId);
+      throw error;
+    }
   }
 }

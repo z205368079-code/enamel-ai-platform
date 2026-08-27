@@ -3,10 +3,14 @@ import { describe, expect, it } from 'vitest';
 
 import { createApp } from '../src/app.js';
 import { ChatwootWebhookService } from '../src/services/chatwoot-webhook-service.js';
+import { KnowledgeAnswerService } from '../src/services/knowledge-answer-service.js';
 import {
   InMemoryConversationRepository,
+  InMemoryAiRunRepository,
+  InMemoryWebhookMessageRepository,
   RecordingChatwootClient,
   RecordingLogger,
+  RecordingMaxKBClient,
 } from './test-doubles.js';
 
 describe('GET /health', () => {
@@ -16,6 +20,12 @@ describe('GET /health', () => {
       createApp({
         webhookService: new ChatwootWebhookService(
           new InMemoryConversationRepository(),
+          new InMemoryWebhookMessageRepository(),
+          new KnowledgeAnswerService(
+            new RecordingMaxKBClient(),
+            new InMemoryAiRunRepository(),
+            logger,
+          ),
           new RecordingChatwootClient(),
           logger,
         ),

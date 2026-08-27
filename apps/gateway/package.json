@@ -8,6 +8,8 @@
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsx watch src/server.ts",
     "lint": "eslint .",
+    "migrate": "tsx src/cli/migrate.ts",
+    "migrate:prod": "node dist/cli/migrate.js",
     "start": "node dist/server.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

@@ -15,6 +15,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "npm run lint --workspace @enamel-ai/gateway",
+    "migrate": "npm run migrate --workspace @enamel-ai/gateway",
     "start": "npm run start --workspace @enamel-ai/gateway",
     "test": "npm run test --workspace @enamel-ai/gateway",
     "typecheck": "npm run typecheck --workspace @enamel-ai/gateway",
