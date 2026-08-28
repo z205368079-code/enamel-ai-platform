@@ -6,6 +6,7 @@
 
 - [Synthetic Demo Knowledge Base](demo-data/enamel-cookware/README.md)
 - [MaxKB import setup](docs/maxkb-demo-setup.md)
+- [Interview Architecture](docs/interview-architecture.md)
 - [Interview demo guide](docs/interview-demo.md)
 
 用于珐琅锅企业 AI 应用与客服知识库技术面试展示的集成型 PoC（概念验证）。项目重点是清晰展示开源选型、系统集成、API 边界、Docker 部署和后续 AI/人工协作设计，而不是开发完整商业 SaaS。
