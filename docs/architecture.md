@@ -80,7 +80,7 @@ MaxKB v2 首次响应可在 `choices[0].chat_id` 返回真正的 MaxKB 会话 ID
 
 ## 5. 数据边界
 
-`conversations` 保存 `id`、`chatwoot_conversation_id`、`contact_id`、`mode`、实际响应回填的 nullable `maxkb_chat_id` 与时间戳；同一 Chatwoot conversation 通过唯一键 upsert。`ai_runs` 保存问题、可空答案、状态、延迟、错误码与关联的本地 conversation，便于演示链路审计。`handoff_events` 与 `knowledge_gaps` 仍留待后续阶段设计。
+`conversations` 保存 `id`、`chatwoot_conversation_id`、`contact_id`、`mode`、实际响应回填的 nullable `maxkb_chat_id` 与时间戳；同一 Chatwoot conversation 通过唯一键 upsert。`ai_runs` 保存问题、可空答案、状态、延迟、错误码与关联的本地 conversation，便于演示链路审计。`handoff_events` 保存人工接管原因与时间；`knowledge_gaps` 保存未解决知识问题的消息标识、原因、状态与时间，且两者均不保存完整 webhook payload。
 
 所有真实 API Key、Token 和密码必须由本地 `.env` 或部署环境注入；仓库只保留无敏感信息的 `.env.example`。
 
