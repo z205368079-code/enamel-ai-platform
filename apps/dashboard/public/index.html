@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Enamel AI 运营控制台 (Operations Dashboard)</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-container">
+      <!-- Header -->
+      <header class="top-header">
+        <div class="brand">
+          <div class="brand-logo">🍳</div>
+          <div>
+            <h1 class="brand-title">Enamel AI 运营控制台</h1>
+            <p class="brand-subtitle">
+              珐琅锅企业业务 AI 客服网关运营审计与状态监控
+            </p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <div id="gatewayStatusBadge" class="status-badge status-loading">
+            <span class="status-dot"></span>
+            <span class="status-text">检查 Gateway 状态...</span>
+          </div>
+          <div class="auto-refresh-toggle">
+            <label class="switch-label">
+              <input type="checkbox" id="autoRefreshToggle" />
+              <span class="switch-slider"></span>
+              <span>10s 自动刷新</span>
+            </label>
+          </div>
+          <button id="refreshBtn" class="btn btn-primary" title="刷新所有数据">
+            <svg
+              class="icon"
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              stroke="currentColor"
+              stroke-width="2"
+              fill="none"
+            >
+              <path
+                d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"
+              />
+            </svg>
+            刷新
+          </button>
+        </div>
+      </header>
+
+      <!-- Navigation Tabs -->
+      <nav class="nav-tabs" aria-label="页面导航">
+        <button class="nav-tab active" data-tab="overview">
+          <span class="tab-icon">📊</span> 系统概览 (Overview)
+        </button>
+        <button class="nav-tab" data-tab="knowledge-gaps">
+          <span class="tab-icon">🔍</span> 知识盲区 (Knowledge Gaps)
+        </button>
+        <button class="nav-tab" data-tab="architecture">
+          <span class="tab-icon">📐</span> 架构与安全规范 (Architecture)
+        </button>
+      </nav>
+
+      <!-- Main Content Area -->
+      <main class="main-content">
+        <!-- Global Notice Banner (Hidden by default, shown on error) -->
+        <div
+          id="globalNotice"
+          class="notice-banner notice-error hidden"
+          role="alert"
+        >
+          <span class="notice-icon">⚠️</span>
+          <div class="notice-content">
+            <strong id="noticeTitle">暂时无法获取数据</strong>
+            <p id="noticeDesc">请检查 AI Gateway 服务是否已启动且网络可达。</p>
+          </div>
+          <button id="noticeCloseBtn" class="notice-close">&times;</button>
+        </div>
+
+        <!-- Tab 1: 概览页 -->
+        <section id="tab-overview" class="tab-panel active">
+          <!-- Gateway 状态卡片 -->
+          <div class="gateway-info-bar card">
+            <div class="info-bar-item">
+              <span class="label">Gateway 连通性</span>
+              <span id="gwConnText" class="val val-highlight">检测中...</span>
+            </div>
+            <div class="info-bar-divider"></div>
+            <div class="info-bar-item">
+              <span class="label">目标网关地址</span>
+              <span id="gwUrlText" class="val code-font"
+                >http://127.0.0.1:3000</span
+              >
+            </div>
+            <div class="info-bar-divider"></div>
+            <div class="info-bar-item">
+              <span class="label">健康延迟</span>
+              <span id="gwLatencyText" class="val">-- ms</span>
+            </div>
+            <div class="info-bar-divider"></div>
+            <div class="info-bar-item">
+              <span class="label">最后心跳时间</span>
+              <span id="gwHeartbeatText" class="val">--</span>
+            </div>
+          </div>
+
+          <div class="section-title">
+            <h2>会话运行状态 (Conversation Modes)</h2>
+            <span class="badge-tag">PostgreSQL 实时聚合</span>
+          </div>
+
+          <!-- 会话卡片组 -->
+          <div class="metric-grid metric-grid-3">
+            <div class="metric-card card">
+              <div class="metric-header">
+                <span class="metric-title">总会话数</span>
+                <span class="metric-badge">Total</span>
+              </div>
+              <div class="metric-value-row">
+                <span id="valTotalConversations" class="metric-value">--</span>
+                <span class="metric-unit">个</span>
+              </div>
+              <p class="metric-desc">
+                网关在持久层记录并接入的客户服务会话累计总量。
+              </p>
+            </div>
+
+            <div class="metric-card card border-ai">
+              <div class="metric-header">
+                <span class="metric-title">AI 模式会话</span>
+                <span class="metric-badge badge-ai">AI Mode</span>
+              </div>
+              <div class="metric-value-row">
+                <span id="valAiConversations" class="metric-value color-ai"
+                  >--</span
+                >
+                <span class="metric-unit">个</span>
+              </div>
+              <p class="metric-desc">
+                当前由 AI Gateway 知识库/大模型自动托管解答的正常会话。
+              </p>
+            </div>
+
+            <div class="metric-card card border-human">
+              <div class="metric-header">
+                <span class="metric-title">人工模式会话</span>
+                <span class="metric-badge badge-human">Human Mode</span>
+              </div>
+              <div class="metric-value-row">
+                <span
+                  id="valHumanConversations"
+                  class="metric-value color-human"
+                  >--</span
+                >
+                <span class="metric-unit">个</span>
+              </div>
+              <p class="metric-desc">
+                因触发敏感风控词、客户明确要求或连续应答故障而转交坐席的会话。
+              </p>
+            </div>
+          </div>
+
+          <div class="section-title">
+            <h2>AI 推理与接管指标 (AI Runs & Operations)</h2>
+            <span class="badge-tag">只读审计</span>
+          </div>
+
+          <!-- 详细指标组 -->
+          <div class="metric-grid metric-grid-4">
+            <div class="metric-card card">
+              <div class="metric-header">
+                <span class="metric-title">AI 调用总次数</span>
+                <span class="metric-badge">Runs</span>
+              </div>
+              <div class="metric-value-row">
+                <span id="valTotalAiRuns" class="metric-value">--</span>
+                <span class="metric-unit">次</span>
+              </div>
+              <p class="metric-desc">
+                向 MaxKB 知识库及 DeepSeek 兜底模型发起的全部推理请求次数。
+              </p>
+            </div>
+
+            <div class="metric-card card border-success">
+              <div class="metric-header">
+                <span class="metric-title">成功调用</span>
+                <span class="metric-badge badge-success">Success</span>
+              </div>
+              <div class="metric-value-row">
+                <span
+                  id="valSuccessfulAiRuns"
+                  class="metric-value color-success"
+                  >--</span
+                >
+                <span class="metric-unit">次</span>
+              </div>
+              <p class="metric-desc">
+                成功获得有效知识检索或模型推理输出并回传给 Chatwoot 的次数。
+              </p>
+            </div>
+
+            <div class="metric-card card border-danger">
+              <div class="metric-header">
+                <span class="metric-title">失败调用</span>
+                <span class="metric-badge badge-danger">Failed</span>
+              </div>
+              <div class="metric-value-row">
+                <span id="valFailedAiRuns" class="metric-value color-danger"
+                  >--</span
+                >
+                <span class="metric-unit">次</span>
+              </div>
+              <p class="metric-desc">
+                因网络超时、API 错误码、服务不可用或无效格式导致的失败调用。
+              </p>
+            </div>
+
+            <div class="metric-card card border-warning">
+              <div class="metric-header">
+                <span class="metric-title">人工接管事件</span>
+                <span class="metric-badge badge-warning">Handoffs</span>
+              </div>
+              <div class="metric-value-row">
+                <span id="valHumanHandoffs" class="metric-value color-warning"
+                  >--</span
+                >
+                <span class="metric-unit">次</span>
+              </div>
+              <p class="metric-desc">
+                受控状态机触发转人工、并原子记录且同步更新 Chatwoot
+                标签的事件总数。
+              </p>
+            </div>
+          </div>
+
+          <!-- 第三排指标：知识缺口 & 延迟 -->
+          <div class="metric-grid metric-grid-2">
+            <div class="metric-card card">
+              <div class="metric-header">
+                <span class="metric-title">知识盲区 (Knowledge Gaps)</span>
+                <span class="metric-badge badge-info">Gaps</span>
+              </div>
+              <div class="metric-value-row">
+                <span id="valKnowledgeGaps" class="metric-value color-info"
+                  >--</span
+                >
+                <span class="metric-unit">条</span>
+              </div>
+              <p class="metric-desc">
+                知识库无明确回答且未命中有效兜底时记录的待完善知识缺陷问题。
+              </p>
+            </div>
+
+            <div class="metric-card card">
+              <div class="metric-header">
+                <span class="metric-title">平均 AI 推理延迟</span>
+                <span class="metric-badge">Latency</span>
+              </div>
+              <div class="metric-value-row">
+                <span id="valAverageAiLatency" class="metric-value">--</span>
+                <span class="metric-unit">ms</span>
+              </div>
+              <p class="metric-desc">
+                AI 请求端到端往返耗时（HTTP 请求 + 向量检索 /
+                模型推理）的算术平均值。
+              </p>
+            </div>
+          </div>
+
+          <div class="card audit-boundary-note">
+            <div class="note-icon">ℹ️</div>
+            <div>
+              <strong>指标统计口径说明：</strong>
+              <span
+                >AI 调用次数以 Provider 请求级别统计。若 MaxKB 命中
+                <code>NO_ANSWER</code> 后由 DeepSeek 成功兜底，会产生两条独立的
+                AI Run 记录。所有数据均由 Gateway
+                内部聚合，不直接对外暴露数据库连接。</span
+              >
+            </div>
+          </div>
+        </section>
+
+        <!-- Tab 2: Knowledge Gaps 页面 -->
+        <section id="tab-knowledge-gaps" class="tab-panel">
+          <div class="panel-header">
+            <div>
+              <h2>知识盲区列表 (Unresolved Knowledge Gaps)</h2>
+              <p class="panel-subtitle">
+                记录知识库无法解决或未能准确匹配的用户问题，供运营与知识库维护人员跟进优化。
+              </p>
+            </div>
+            <div class="panel-actions">
+              <span class="security-chip"
+                >🔒 敏感字段已脱敏：不展示聊天明文与 Payload</span
+              >
+            </div>
+          </div>
+
+          <div class="card table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 80px">ID</th>
+                  <th style="width: 160px">Conversation ID</th>
+                  <th style="width: 220px">Message ID</th>
+                  <th style="width: 140px">触发原因</th>
+                  <th style="width: 120px">状态</th>
+                  <th>记录时间 (Created At)</th>
+                </tr>
+              </thead>
+              <tbody id="knowledgeGapsTableBody">
+                <!-- Dynamic rows or skeleton -->
+                <tr>
+                  <td colspan="6" class="table-loading-row">
+                    <div class="skeleton-loader">正在获取知识盲区数据...</div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <!-- Empty State -->
+            <div id="gapsEmptyState" class="empty-state hidden">
+              <div class="empty-icon">🎉</div>
+              <h3>当前未发现知识盲区</h3>
+              <p>知识库应答良好，或系统尚无未命中的客服问题记录。</p>
+            </div>
+
+            <!-- Error State -->
+            <div
+              id="gapsErrorState"
+              class="empty-state empty-state-error hidden"
+            >
+              <div class="empty-icon">⚠️</div>
+              <h3>暂时无法获取知识盲区数据</h3>
+              <p>
+                无法连接到 AI Gateway 后端服务，请确认网关运行状态及网络连接。
+              </p>
+              <button id="retryGapsBtn" class="btn btn-secondary mt-2">
+                重新尝试加载
+              </button>
+            </div>
+
+            <!-- Pagination Footer -->
+            <div class="pagination-footer">
+              <div class="pagination-info">
+                显示第 <span id="pageOffsetStart">0</span> -
+                <span id="pageOffsetEnd">0</span> 条
+              </div>
+              <div class="pagination-controls">
+                <label for="pageSizeSelect" class="text-sm">每页显示：</label>
+                <select id="pageSizeSelect" class="select-input">
+                  <option value="5">5 条</option>
+                  <option value="10" selected>10 条</option>
+                  <option value="20">20 条</option>
+                  <option value="50">50 条</option>
+                </select>
+                <button id="prevPageBtn" class="btn btn-secondary" disabled>
+                  上一页
+                </button>
+                <span id="currentPageIndicator" class="page-indicator"
+                  >第 1 页</span
+                >
+                <button id="nextPageBtn" class="btn btn-secondary" disabled>
+                  下一页
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Tab 3: 架构说明页 -->
+        <section id="tab-architecture" class="tab-panel">
+          <div class="panel-header">
+            <div>
+              <h2>系统架构与安全边界说明</h2>
+              <p class="panel-subtitle">
+                Enamel AI Platform 集成架构、核心消息流转链路与隔离规范。
+              </p>
+            </div>
+          </div>
+
+          <!-- 流程图流转卡片 -->
+          <div class="card flow-card">
+            <h3 class="flow-title">1. 核心业务消息流转链路</h3>
+            <div class="flow-diagram">
+              <div class="flow-node flow-external">
+                <div class="node-badge">终端</div>
+                <div class="node-title">客户 (Customer)</div>
+                <div class="node-sub">Web 聊天窗口</div>
+              </div>
+              <div class="flow-arrow">
+                <span class="arrow-line"></span>
+                <span class="arrow-text">发送咨询</span>
+              </div>
+              <div class="flow-node flow-thirdparty">
+                <div class="node-badge">第三方开源</div>
+                <div class="node-title">Chatwoot 客服系统</div>
+                <div class="node-sub">会话调度与坐席中心</div>
+              </div>
+              <div class="flow-arrow">
+                <span class="arrow-line"></span>
+                <span class="arrow-text">Webhook 投递</span>
+              </div>
+              <div class="flow-node flow-core">
+                <div class="node-badge node-badge-core">本项目核心</div>
+                <div class="node-title">AI Gateway 网关</div>
+                <div class="node-sub">Node.js/TS 策略引擎</div>
+              </div>
+              <div class="flow-arrow">
+                <span class="arrow-line"></span>
+                <span class="arrow-text">RAG 检索</span>
+              </div>
+              <div class="flow-node flow-thirdparty">
+                <div class="node-badge">第三方开源</div>
+                <div class="node-title">MaxKB 知识库</div>
+                <div class="node-sub">珐琅锅专业知识库</div>
+              </div>
+              <div class="flow-arrow">
+                <span class="arrow-line"></span>
+                <span class="arrow-text">生成应答</span>
+              </div>
+              <div class="flow-node flow-core">
+                <div class="node-badge node-badge-core">回传回复</div>
+                <div class="node-title">Gateway → Chatwoot</div>
+                <div class="node-sub">推送给客户</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 关键策略与边界卡片组 -->
+          <div class="arch-cards-grid">
+            <!-- 核心策略 1: DeepSeek 受控兜底 -->
+            <div class="card arch-card">
+              <div class="arch-card-header">
+                <span class="arch-card-icon">🤖</span>
+                <div>
+                  <h3>DeepSeek 受控兜底机制</h3>
+                  <span class="badge-tag">精准触发规则</span>
+                </div>
+              </div>
+              <div class="arch-card-body">
+                <ul>
+                  <li>
+                    <strong>触发条件：</strong>仅当 MaxKB 知识库检索并返回精确
+                    <code>NO_ANSWER</code> 标识，且网关配置了
+                    <code>DEEPSEEK_API_KEY</code> 时，才调用 DeepSeek
+                    作为通用大模型兜底。
+                  </li>
+                  <li>
+                    <strong>非触发场景：</strong>若 MaxKB 产生网络超时、HTTP
+                    报错或响应异常，网关<strong>绝不</strong>盲目调用大模型编造答案，而是受控转入人工。
+                  </li>
+                  <li>
+                    <strong>审计留痕：</strong>DeepSeek 的成功回答作为独立 AI
+                    Run 记录留存，避免与知识库检索结果混淆。
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- 核心策略 2: Human Handoff -->
+            <div class="card arch-card">
+              <div class="arch-card-header">
+                <span class="arch-card-icon">👨‍💼</span>
+                <div>
+                  <h3>受控 Human Handoff 人工接管</h3>
+                  <span class="badge-tag">风控与状态机</span>
+                </div>
+              </div>
+              <div class="arch-card-body">
+                <ul>
+                  <li>
+                    <strong>触发规则：</strong
+                    >客户明确要求人工（如“人工”、“投诉”）、命中 Demo
+                    敏感风控词（赔偿、法律、人身伤害等），或连续 AI
+                    失败超过阈值。
+                  </li>
+                  <li>
+                    <strong>原子状态机：</strong>在 PostgreSQL
+                    中原子落盘状态切换（<code>AI → HUMAN</code>）并记录
+                    <code>handoff_events</code>。
+                  </li>
+                  <li>
+                    <strong>第三方标记：</strong>通过 Chatwoot 官方标签 API
+                    在保留原标签基础上追加 <code>human_handoff</code>，由
+                    Chatwoot 人工坐席继续跟进，网关不再自动应答。
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- 核心边界 3: 架构边界 -->
+            <div class="card arch-card">
+              <div class="arch-card-header">
+                <span class="arch-card-icon">🏛️</span>
+                <div>
+                  <h3>系统职责与源码边界</h3>
+                  <span class="badge-tag">非侵入式集成</span>
+                </div>
+              </div>
+              <div class="arch-card-body">
+                <ul>
+                  <li>
+                    <strong>第三方组件：</strong>Chatwoot 与 MaxKB
+                    为独立外部服务，本项目<strong
+                      >不 fork、不魔改、不复制代码</strong
+                    >，全部通过标准 HTTP API 进行非侵入式解耦交互。
+                  </li>
+                  <li>
+                    <strong>自主实现边界：</strong>AI
+                    Gateway（Node.js/TypeScript）、状态机、幂等认领、审计流转、BFF
+                    及本运营控制台为本项目完全自主研发。
+                  </li>
+                  <li>
+                    <strong>安全防环：</strong>网关仅消费
+                    <code>incoming</code> 客户消息，忽略自己发出的
+                    <code>outgoing</code> 消息，从根源杜绝消息循环。
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- 核心边界 4: BFF 与凭据安全 -->
+            <div class="card arch-card">
+              <div class="arch-card-header">
+                <span class="arch-card-icon">🛡️</span>
+                <div>
+                  <h3>Dashboard 前端与 BFF 安全隔离</h3>
+                  <span class="badge-tag">凭据零泄露</span>
+                </div>
+              </div>
+              <div class="arch-card-body">
+                <ul>
+                  <li>
+                    <strong>Token 隔离：</strong>网关
+                    <code>/internal/*</code> 接口受
+                    <code>INTERNAL_API_TOKEN</code> 保护，该 Token 仅驻留在
+                    Dashboard BFF 服务端内存中。
+                  </li>
+                  <li>
+                    <strong>前端安全：</strong>浏览器仅能访问 BFF
+                    提供的无认证只读
+                    <code>/api/*</code> 接口，静态文件、Bundle、URL
+                    及前端日志中<strong>绝对不存在</strong>任何敏感密钥。
+                  </li>
+                  <li>
+                    <strong>最小化只读：</strong
+                    >当前控制台严格维持只读状态，不提供破坏性操作或替代 Chatwoot
+                    坐席的越权入口。
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <!-- Footer -->
+      <footer class="app-footer">
+        <p>
+          Enamel AI Platform &copy; 2026 &middot; 搪瓷厨具企业 AI 客服技术验证
+          PoC &middot; 运营审计只读看板
+        </p>
+      </footer>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

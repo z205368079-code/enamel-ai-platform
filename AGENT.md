@@ -40,7 +40,7 @@ For a local interview demo, a trusted operator may use the internal API through 
 | `GET /internal/knowledge-gaps?limit=&offset=` | Read-only knowledge-gap list         | Internal Bearer token | Call only through a future server-side BFF.                          |
 | `POST /internal/conversations/:id/resume-ai`  | Demo/admin recovery from HUMAN to AI | Internal Bearer token | Keep out of the first read-only dashboard.                           |
 
-The dashboard should initially show only: aggregate stats, knowledge gaps, metric definitions, and a clear label that HUMAN conversations require a Chatwoot operator. It should not become a second customer-service system.
+The dashboard should initially show only: aggregate stats, knowledge gaps, metric definitions, and a clear label that HUMAN conversations require a Chatwoot operator. It should not become a second customer-service system. For design decisions, defect root-cause analyses, and verification notes, see [`docs/dashboard-implementation-notes.md`](docs/dashboard-implementation-notes.md).
 
 ## Architecture backlog
 
@@ -80,7 +80,9 @@ Run the repository checks before a demo:
 
 ```bash
 npm run verify
-docker compose -f infra/docker-compose.yml config
+docker compose --env-file .env -f infra/docker-compose.yml config
 ```
+
+The Compose file lives in `infra/`, while local configuration lives in the repository-root `.env`. Always pass `--env-file .env`; otherwise `INTERNAL_API_TOKEN` is interpolated as empty and protected Gateway APIs correctly return `401`. This local setup issue and its verified resolution are recorded in [`docs/dashboard-implementation-notes.md`](docs/dashboard-implementation-notes.md).
 
 Never commit `.env`, `infra/.env.chatwoot`, API keys, passwords, `Authorization` headers, or `INTERNAL_API_TOKEN` values. Keep only placeholder values in `.env.example`.

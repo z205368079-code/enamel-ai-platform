@@ -8,6 +8,7 @@
 - [MaxKB import setup](docs/maxkb-demo-setup.md)
 - [Interview Architecture](docs/interview-architecture.md)
 - [Interview demo guide](docs/interview-demo.md)
+- [Operations Dashboard notes & defect log](docs/dashboard-implementation-notes.md)
 - [Future agent and frontend handoff](AGENT.md)
 
 用于珐琅锅企业 AI 应用与客服知识库技术面试展示的集成型 PoC（概念验证）。项目重点是清晰展示开源选型、系统集成、API 边界、Docker 部署和后续 AI/人工协作设计，而不是开发完整商业 SaaS。
@@ -22,10 +23,11 @@
 - 独立 MaxKB Application API Client（timeout、有限重试、错误分类与延迟记录）
 - AI / HUMAN 会话状态、人工接管事件、失败阈值与内部恢复 AI 接口
 - PostgreSQL 15 基础服务与 `conversations`、`ai_runs` 表初始化
+- 只读 Operations Dashboard 及独立服务端 BFF（默认绑定 `127.0.0.1` 保护内网凭据）
 - Docker Compose 本地编排
 - ESLint、Prettier、TypeScript strict、Vitest
 
-以下能力尚未实现：Dashboard。Gateway 优先使用 MaxKB；仅在 MaxKB 明确无答案时可选调用 DeepSeek 通用兜底。
+Gateway 优先使用 MaxKB；仅在 MaxKB 明确无答案时可选调用 DeepSeek 通用兜底。高级用户管理、RBAC 与在线修改知识库不属于当前范围。
 
 ## 架构边界
 
@@ -59,10 +61,10 @@ npm run dev
 先复制 `.env.example` 为 `.env`，并将本地数据库密码替换为自己的值，然后执行：
 
 ```bash
-docker compose -f infra/docker-compose.yml up --build
+docker compose --env-file .env -f infra/docker-compose.yml up --build
 ```
 
-Compose 会启动：
+`docker-compose.yml` 位于 `infra/`，因此必须显式传入项目根目录的 `.env`；否则 Gateway 会拿到空的 `INTERNAL_API_TOKEN`，内部统计接口会安全地返回 `401`。Compose 会启动：
 
 - `postgres`：业务数据持久化基础设施。
 - `migrate`：在 PostgreSQL 健康后执行版本化 SQL migration；已执行版本不会重复执行。
@@ -138,7 +140,7 @@ MaxKB 必须在检索内容无法支持产品问题时严格返回 `NO_ANSWER`�
 
 ```bash
 npm run verify
-docker compose -f infra/docker-compose.yml config
+docker compose --env-file .env -f infra/docker-compose.yml config
 ```
 
 `verify` 依次执行格式检查、lint、类型检查、单元测试和构建。
