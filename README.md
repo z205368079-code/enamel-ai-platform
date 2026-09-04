@@ -46,6 +46,16 @@ npm install
 npm run dev
 ```
 
+## 面试一键启动
+
+在 Windows 桌面双击 `Enamel AI 演示/启动 Enamel AI 演示.cmd`，它会启动 Docker Desktop、Gateway、Chatwoot、已有的 MaxKB 容器和 Dashboard，并打开可点击的演示入口页。也可以从仓库根目录手动运行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/start-demo.ps1
+```
+
+启动器只使用本机 `.env`，不会显示或写入任何 Token。它假设 MaxKB 容器名称为 `enamel-maxkb`；如果该容器不存在，入口页仍会显示 MaxKB 地址但无法启动服务。
+
 访问 `http://localhost:3000/health`，预期返回：
 
 ```json

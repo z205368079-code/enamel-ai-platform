@@ -74,6 +74,10 @@ Implement these in priority order only when the PoC becomes a deployed service. 
 - No replacement of Chatwoot's agent UI, handoff workflow, or email capture.
 - No complex BI, user accounts, or role system until the BFF/auth boundary exists.
 
+## Local interview launcher
+
+`scripts/start-demo.ps1` is the Windows local-demo launcher. It starts Docker Desktop when necessary, starts the existing Gateway and Chatwoot Compose services, starts the pre-existing `enamel-maxkb` container when present, then starts the Dashboard and writes a clickable Desktop entry page. It must keep the Dashboard on `127.0.0.1`; the Chatwoot Widget remains the only LAN/customer-facing entry. The launcher reads local `.env` only and must never print, persist, or commit credential values.
+
 ## Safe verification after future changes
 
 Run the repository checks before a demo:
