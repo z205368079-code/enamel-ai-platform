@@ -108,7 +108,7 @@ function Write-DemoLinks {
     <a href="http://127.0.0.1:3002/">Chatwoot 管理后台<small>人工客服与会话管理</small></a>
     <a href="$WidgetUrl">客户聊天入口<small>模拟客户发起咨询</small></a>
     <a href="http://127.0.0.1:8080/">MaxKB 管理后台<small>知识库与 RAG 应用</small></a>
-    <a href="http://127.0.0.1:3000/health">Gateway 健康检查<small>AI Gateway 存活状态</small></a>
+    <a href="http://127.0.0.1:3001/#overview">系统健康状态<small>可视化展示 Gateway 连通性、延迟和运行指标</small></a>
     <a href="https://github.com/z205368079-code/enamel-ai-platform">GitHub 项目仓库<small>代码、架构和面试文档</small></a>
   </div>
 </body>

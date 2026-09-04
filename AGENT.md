@@ -78,6 +78,8 @@ Implement these in priority order only when the PoC becomes a deployed service. 
 
 `scripts/start-demo.ps1` is the Windows local-demo launcher. It starts Docker Desktop when necessary, starts the existing Gateway and Chatwoot Compose services, starts the pre-existing `enamel-maxkb` container when present, then starts the Dashboard and writes a clickable Desktop entry page. It must keep the Dashboard on `127.0.0.1`; the Chatwoot Widget remains the only LAN/customer-facing entry. The launcher reads local `.env` only and must never print, persist, or commit credential values.
 
+`GET /health` remains a machine-facing JSON liveness endpoint for Docker and monitoring. Human-facing demo links must open the Dashboard overview instead of presenting the raw JSON response as a user interface.
+
 ## Safe verification after future changes
 
 Run the repository checks before a demo:
